@@ -16,26 +16,28 @@ def get_dim_act_curv(args):
     :param args:
     :return:
     """
+    if args.enc:
+        args.act = args.act_enc
+        args.num_layers = len(args.enc_dims) - 1
+        dims = args.enc_dims
+        args.enc = 0
+    else:
+        args.act = args.act_dec
+        args.num_layers = len(args.dec_dims) - 1
+        dims = args.dec_dims
     if not args.act:
         act = lambda x: x
     else:
         act = getattr(F, args.act)
-    acts = [act] * (args.num_layers - 1)
-    dims = [args.feat_dim] + ([args.dim] * (args.num_layers - 1))
-    if args.task in ['lp', 'rec']:
-        dims += [args.dim]
-        acts += [act]
-        n_curvatures = args.num_layers
-    else:
-        n_curvatures = args.num_layers - 1
+    acts = [act] * (args.num_layers)
     if args.c is None:
         # create list of trainable curvature parameters
-        curvatures = [nn.Parameter(torch.Tensor([1.])) for _ in range(n_curvatures)]
+        curvatures = [nn.Parameter(torch.Tensor([1.])) for _ in range(args.num_layers)]
     else:
         # fixed curvature
-        curvatures = [torch.tensor([args.c]) for _ in range(n_curvatures)]
+        curvatures = [torch.tensor([args.c]) for _ in range(args.num_layers)]
         if not args.cuda == -1:
-            curvatures = [curv.to(args.device) for curv in curvatures]
+            curvatures = [curv.to(args.device) for curv in curvatures]    
     return dims, acts, curvatures
 
 
