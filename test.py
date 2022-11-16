@@ -5,6 +5,7 @@ import torch
 if __name__ == '__main__':
     args = parser.parse_args()
     args.dec_dims[0] = sum(args.enc_dims)
+    args.num_layers
     enc = HGCN(1.,args)
     dec = HNN(1.,args)
     n = 100

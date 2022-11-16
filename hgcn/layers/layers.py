@@ -14,15 +14,21 @@ def get_dim_act(args):
     :param args:
     :return:
     """
+
+    if args.enc:
+        args.act = args.act_enc
+        args.num_layers = len(args.enc_dims) - 1
+        dims = args.enc_dims
+        args.enc = 0
+    else:
+        args.act = args.act_dec
+        args.num_layers = len(args.dec_dims) - 1
+        dims = args.dec_dims
     if not args.act:
         act = lambda x: x
     else:
         act = getattr(F, args.act)
-    acts = [act] * (args.num_layers - 1)
-    dims = [args.feat_dim] + ([args.dim] * (args.num_layers - 1))
-    if args.task in ['lp', 'rec']:
-        dims += [args.dim]
-        acts += [act]
+    acts = [act] * (args.num_layers)
     return dims, acts
 
 
