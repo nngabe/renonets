@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from torch.nn.modules.module import Module
 from torch.nn.parameter import Parameter
 
+act_dict = {'relu': F.relu, 'silu': F.silu, 'lrelu': F.leaky_relu}
 
 def get_dim_act(args):
     """
@@ -16,18 +17,15 @@ def get_dim_act(args):
     """
 
     if args.enc:
-        args.act = args.act_enc
+        act = act_dict[args.act_enc] if args.act_enc in act_dict else F.relu
         args.num_layers = len(args.enc_dims) - 1
         dims = args.enc_dims
         args.enc = 0
+        args.skip = 0
     else:
-        args.act = args.act_dec
+        act = act_dict[args.act_enc] if args.act_enc in act_dict else F.relu
         args.num_layers = len(args.dec_dims) - 1
         dims = args.dec_dims
-    if not args.act:
-        act = lambda x: x
-    else:
-        act = getattr(F, args.act)
     acts = [act] * (args.num_layers)
     return dims, acts
 

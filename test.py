@@ -1,15 +1,29 @@
-from hgcn.models.encoders import HNN,HGCN
+from hgcn.models.models import HNN,HGCN
 from config import parser
 import torch
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    args.dec_dims[0] = sum(args.enc_dims)
-    args.num_layers
-    enc = HGCN(1.,args)
-    dec = HNN(1.,args)
-    n = 100
-    x,adj = torch.rand([10,60]),torch.randint(0,10,(2,10),dtype=torch.int64)
-    A = torch.sparse_coo_tensor(adj,torch.ones(adj.shape[1]),size=(10,10))
+    if args.skip: 
+        args.dec_dims[0] = sum(args.enc_dims) + args.time_enc[1] * args.time_dim
+    else: 
+        args.dec_dims[0] = args.enc_dims[-1] + args.time_enc[1] * args.time_dim
+    enc = HGCN(1., args)
+    dec = HNN(1., args)
+    T = 2000
+    n = 1000
+    tau = 60
+    xx = torch.rand([n, tau + T]) 
+    adj = torch.randint(0, n, (2,n), dtype=torch.int64)
+    A = torch.sparse_coo_tensor(adj, torch.ones(adj.shape[1]), size=(n,n))
     
-    z = enc.encode(x,A)
+    for i in range(args.epochs):
+        ti = torch.randint(1,T,(1,5))[0]
+        for t in ti:
+            x = xx[:,int(t):int(t)+tau]
+            z = enc(x,A)
+            G = dec(z,A,t)
+            y = t*torch.ones_like(G)
+
+        if i % args.log_freq == 0:
+            print(f'{i}/{args.epochs}')
