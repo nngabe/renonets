@@ -24,11 +24,14 @@ class Model(nn.Module):
         self.omega = 1 / 10 ** torch.linspace(0,6,args.time_dim)
 
     def time_encode(self, t, d):
-        coefs = torch.cos(self.omega*t)
+        #coefs = torch.cos(self.omega*t)
+        coefs = t#torch.cat([t,t**2],requires_grad=True)
+        #coefs = torch.cat([coefs,torch.zeros( self.omega.shape[0] - coefs.shape[0])])
         return coefs*torch.ones((d,1)) 
 
     def forward(self, x, adj, t=None):
-        if t:
+        if t != None:
+            #t = torch.tensor(int(t),dtype=torch.float)
             d = x.shape[0]
             te = self.time_encode(t,d)
             x = torch.cat([te,x],dim=1)

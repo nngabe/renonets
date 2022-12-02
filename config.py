@@ -4,10 +4,10 @@ from hgcn.utils.train_utils import add_flags_from_config
 
 config_args = {
     'training_config': {
-        'lr': (0.01, 'learning rate'),
+        'lr': (0.005, 'learning rate'),
         'dropout': (0.0, 'dropout probability'),
         'cuda': (-1, 'which cuda device to use (-1 for cpu training)'),
-        'epochs': (5000, 'maximum number of epochs to train for'),
+        'epochs': (200, 'maximum number of epochs to train for'),
         'weight-decay': (0., 'l2 regularization strength'),
         'optimizer': ('Adam', 'which optimizer to use, can be any of [Adam, RiemannianAdam]'),
         'momentum': (0.999, 'momentum in optimizer'),
@@ -18,21 +18,21 @@ config_args = {
         'save': (0, '1 to save model and logs and 0 otherwise'),
         'save-dir': (None, 'path to save training logs and model weights (defaults to logs/task/date/run/)'),
         'sweep-c': (0, ''),
-        'lr-reduce-freq': (None, 'reduce lr every lr-reduce-freq or None to keep lr constant'),
+        'lr-reduce-freq': (1000, 'reduce lr every lr-reduce-freq or None to keep lr constant'),
         'gamma': (0.5, 'gamma for lr scheduler'),
         'print-epoch': (True, ''),
-        'grad-clip': (None, 'max norm for gradient clipping, or None for no gradient clipping'),
+        'max-norm': (100., 'max norm for gradient clipping, or None for no gradient clipping'),
         'min-epochs': (100, 'do not early stop before min-epochs')
     },
     'model_config': {
         'time_enc': ([0,1], 'whether to insert time encoding in encoder or decoder, respectively'),
-        'time_dim': (10, 'dimension of Fourier time embedding'), 
+        'time_dim': (100, 'dimension of Fourier time embedding'), 
         'enc': (1, 'flag indicating whether we are init-ing the encoder(1) or decoder(0). set to 0 after encoder init'),
         'num_layers': (-1, 'number of layers in encoder or decoder during init'), 
         'encoder': ('HGCN', 'which encoder to use, can be any of [Shallow, MLP, HNN, GCN, GAT, HyperGCN]'),
         'decoder': ('HNN', 'which decoder to use, can be any of [Shallow, MLP, HNN, GCN, GAT, HyperGCN]'),
         'enc_dims': ([60,24,5], 'dimensions of encoder layers'),
-        'dec_dims': ([-1,48,48,48,48,1],'dimensions of decoder layers'),
+        'dec_dims': ([-1,48,48,1],'dimensions of decoder layers'),
         'skip': (1, 'whether to use skip connections in encoder or not'),
         'manifold': ('Euclidean', 'which manifold to use, can be any of [Euclidean, Hyperboloid, PoincareBall]'),
         'c': (1.0, 'hyperbolic radius, set to None for trainable curvature'),
