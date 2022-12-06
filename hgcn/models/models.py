@@ -1,9 +1,4 @@
-"""Graph encoders."""
-
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from typing import Any, Optional, Sequence, Tuple, Union
 
 import manifolds
 from layers.att_layers import GraphAttentionLayer
@@ -11,30 +6,41 @@ import layers.hyp_layers as hyp_layers
 from layers.layers import GraphConvolution, Linear, get_dim_act
 import utils.math_utils as pmath
 
+import numpy as np
+import jax
+import jax.numpy as jnp
+from jax.numpy import concatenate as cat
+import equinox as eqx
+import equinox.nn as nn
+from equinox.module import Module, static_field
 
-class Model(nn.Module):
-    """
-    Model abstract class.
-    """
 
-    def __init__(self, c, args):
+class Model(eqx.Module):
+    c: float
+    skip: bool
+    omega: jax.numpy.ndarray
+    layers: eqx.nn.Sequential
+    encode_graph: bool
+    manifold: Optional[manifolds.base.Manifold] = None
+
+    def __init__(self, args):
         super(Model, self).__init__()
-        self.c = c
+        self.c = args.c
         self.skip = args.skip
-        self.omega = 1 / 10 ** torch.linspace(0,6,args.time_dim)
+        self.omega = 1 / 10 ** jnp.linspace(0,6,args.time_dim)
 
     def time_encode(self, t, d):
         #coefs = torch.cos(self.omega*t)
         coefs = t#torch.cat([t,t**2],requires_grad=True)
         #coefs = torch.cat([coefs,torch.zeros( self.omega.shape[0] - coefs.shape[0])])
-        return coefs*torch.ones((d,1)) 
+        return coefs#*jnp.ones((d,1)) 
 
-    def forward(self, x, adj, t=None):
+    def __call__(self, x, adj=None, t=None):
         if t != None:
             #t = torch.tensor(int(t),dtype=torch.float)
             d = x.shape[0]
             te = self.time_encode(t,d)
-            x = torch.cat([te,x],dim=1)
+            x = cat([te,x], axis=0)
         if self.skip:
             return self._cat(x,adj)
         else:
@@ -60,22 +66,22 @@ class Model(nn.Module):
             for layer in self.layers:
                 x = layer.forward(x)
                 xi.append(x)
-        return torch.cat(xi,dim=1)
+        return cat(xi, axis=0)
 
 class MLP(Model):
     """
     Multi-layer perceptron.
     """
 
-    def __init__(self, c, args):
-        super(MLP, self).__init__(c,args)
+    def __init__(self, args):
+        super(MLP, self).__init__(args)
         dims, acts = get_dim_act(args)
         layers = []
         for i in range(len(dims) - 1):
             in_dim, out_dim = dims[i], dims[i + 1]
             act = acts[i]
             layers.append(Linear(in_dim, out_dim, args.dropout, act, args.bias))
-        self.layers = nn.Sequential(*layers)
+        self.layers = nn.Sequential(layers)
         self.encode_graph = False
 
 class GCN(Model):
@@ -89,9 +95,8 @@ class GCN(Model):
         gc_layers = []
         for i in range(len(dims) - 1):
             in_dim, out_dim = dims[i], dims[i + 1]
-            act = acts[i]
-            gc_layers.append(GraphConvolution(in_dim, out_dim, args.dropout, act, args.bias))
-        self.layers = nn.Sequential(*gc_layers)
+            gc_layers.append(GraphConvolution(in_dim, out_dim, args.dropout, args.act[0], args.bias))
+        self.layers = nn.Sequential(gc_layers)
         self.encode_graph = True
 
 class HNN(Model):
@@ -172,44 +177,3 @@ class GAT(Model):
         self.layers = nn.Sequential(*gat_layers)
         self.encode_graph = True
 
-
-class Shallow(Model):
-    """
-    Shallow Embedding method.
-    Learns embeddings or loads pretrained embeddings and uses an MLP for classification.
-    """
-
-    def __init__(self, c, args):
-        super(Shallow, self).__init__(c)
-        self.manifold = getattr(manifolds, args.manifold)()
-        self.use_feats = args.use_feats
-        weights = torch.Tensor(args.n_nodes, args.dim)
-        if not args.pretrained_embeddings:
-            weights = self.manifold.init_weights(weights, self.c)
-            trainable = True
-        else:
-            weights = torch.Tensor(np.load(args.pretrained_embeddings))
-            assert weights.shape[0] == args.n_nodes, "The embeddings you passed seem to be for another dataset."
-            trainable = False
-        self.lt = manifolds.ManifoldParameter(weights, trainable, self.manifold, self.c)
-        self.all_nodes = torch.LongTensor(list(range(args.n_nodes)))
-        layers = []
-        if args.pretrained_embeddings is not None and args.num_layers > 0:
-            # MLP layers after pre-trained embeddings
-            dims, acts = get_dim_act(args)
-            if self.use_feats:
-                dims[0] = args.feat_dim + weights.shape[1]
-            else:
-                dims[0] = weights.shape[1]
-            for i in range(len(dims) - 1):
-                in_dim, out_dim = dims[i], dims[i + 1]
-                act = acts[i]
-                layers.append(Linear(in_dim, out_dim, args.dropout, act, args.bias))
-        self.layers = nn.Sequential(*layers)
-        self.encode_graph = False
-
-    def encode(self, x, adj):
-        h = self.lt[self.all_nodes, :]
-        if self.use_feats:
-            h = torch.cat((h, x), 1)
-        return super(Shallow, self).encode(h, adj)

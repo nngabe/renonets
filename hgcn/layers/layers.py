@@ -1,13 +1,16 @@
-"""Euclidean layers."""
+from typing import Any, Optional, Sequence, Tuple, Union, Callable
 import math
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.nn.modules.module import Module
-from torch.nn.parameter import Parameter
+import numpy as np
+import jax
+import jax.numpy as jnp
+from jax.numpy import concatenate as cat
+import equinox as eqx
+import equinox.nn as nn
+from equinox.nn import Dropout as dropout
 
-act_dict = {'relu': F.relu, 'silu': F.silu, 'lrelu': F.leaky_relu}
+prng_key = jax.random.PRNGKey(0)
+act_dict = {'relu': jax.nn.relu, 'silu': jax.nn.silu, 'lrelu': jax.nn.leaky_relu}
 
 def get_dim_act(args):
     """
@@ -30,7 +33,25 @@ def get_dim_act(args):
     return dims, acts
 
 
-class GraphConvolution(Module):
+class Linear(eqx.Module): 
+    p: float
+    linear: jax.numpy.array
+    act: Callable 
+    
+    def __init__(self, in_features, out_features, p, act, use_bias):
+        super(Linear, self).__init__()
+        self.p = p # dropout prob
+        self.linear = nn.Linear(in_features, out_features, use_bias, key=prng_key)
+        self.act = act
+
+    def forward(self, x):
+        hidden = self.linear(x)
+        hidden = dropout(self.p)(hidden, inference=False, key=prng_key)
+        out = self.act(hidden)
+        return out
+
+
+class GraphConvolution(eqx.Module):
     """
     Simple GCN layer.
     """
@@ -38,7 +59,7 @@ class GraphConvolution(Module):
     def __init__(self, in_features, out_features, dropout, act, use_bias):
         super(GraphConvolution, self).__init__()
         self.dropout = dropout
-        self.linear = nn.Linear(in_features, out_features, use_bias)
+        self.linear = nn.Linear(in_features, out_features, use_bias, key=prng_key)
         self.act = act
         self.in_features = in_features
         self.out_features = out_features
@@ -46,7 +67,7 @@ class GraphConvolution(Module):
     def forward(self, input):
         x, adj = input
         hidden = self.linear.forward(x)
-        hidden = F.dropout(hidden, self.dropout, training=self.training)
+        hidden = dropout(self.p)(hidden, inference=False, key=prng_key)
         if adj.is_sparse:
             support = torch.spmm(adj, hidden)
         else:
@@ -59,34 +80,4 @@ class GraphConvolution(Module):
                 self.in_features, self.out_features
         )
 
-
-class Linear(Module):
-    """
-    Simple Linear layer with dropout.
-    """
-
-    def __init__(self, in_features, out_features, dropout, act, use_bias):
-        super(Linear, self).__init__()
-        self.dropout = dropout
-        self.linear = nn.Linear(in_features, out_features, use_bias)
-        self.act = act
-
-    def forward(self, x):
-        hidden = self.linear.forward(x)
-        hidden = F.dropout(hidden, self.dropout, training=self.training)
-        out = self.act(hidden)
-        return out
-
-
-class FermiDiracDecoder(Module):
-    """Fermi Dirac to compute edge probabilities based on distances."""
-
-    def __init__(self, r, t):
-        super(FermiDiracDecoder, self).__init__()
-        self.r = r
-        self.t = t
-
-    def forward(self, dist):
-        probs = 1. / (torch.exp((dist - self.r) / self.t) + 1.0)
-        return probs
 
