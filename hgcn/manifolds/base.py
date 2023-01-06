@@ -1,13 +1,13 @@
 """Base manifold."""
 
 from torch.nn import Parameter
+import equinox as eqx
 
-
-class Manifold(object):
+class Manifold(eqx.Module):
     """
     Abstract class to define operations on a manifold.
     """
-
+    eps: float
     def __init__(self):
         super().__init__()
         self.eps = 10e-8

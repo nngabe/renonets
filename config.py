@@ -7,13 +7,13 @@ config_args = {
         'lr': (0.005, 'learning rate'),
         'dropout': (0.0, 'dropout probability'),
         'cuda': (-1, 'which cuda device to use (-1 for cpu training)'),
-        'epochs': (200, 'maximum number of epochs to train for'),
+        'epochs': (20000, 'maximum number of epochs to train for'),
         'weight-decay': (0., 'l2 regularization strength'),
         'optimizer': ('Adam', 'which optimizer to use, can be any of [Adam, RiemannianAdam]'),
         'momentum': (0.999, 'momentum in optimizer'),
         'patience': (100, 'patience for early stopping'),
         'seed': (1234, 'seed for training'),
-        'log-freq': (10, 'how often to compute print train/val metrics (in epochs)'),
+        'log-freq': (100, 'how often to compute print train/val metrics (in epochs)'),
         'eval-freq': (1, 'how often to compute val metrics (in epochs)'),
         'save': (0, '1 to save model and logs and 0 otherwise'),
         'save-dir': (None, 'path to save training logs and model weights (defaults to logs/task/date/run/)'),
@@ -21,39 +21,59 @@ config_args = {
         'lr-reduce-freq': (1000, 'reduce lr every lr-reduce-freq or None to keep lr constant'),
         'gamma': (0.5, 'gamma for lr scheduler'),
         'print-epoch': (True, ''),
-        'max-norm': (100., 'max norm for gradient clipping, or None for no gradient clipping'),
+        'max-norm': (400., 'max norm for gradient clipping, or None for no gradient clipping'),
         'min-epochs': (100, 'do not early stop before min-epochs')
     },
     'model_config': {
-        'time_enc': ([0,1], 'whether to insert time encoding in encoder or decoder, respectively'),
-        'time_dim': (100, 'dimension of Fourier time embedding'), 
-        'enc': (1, 'flag indicating whether we are init-ing the encoder(1) or decoder(0). set to 0 after encoder init'),
-        'num_layers': (-1, 'number of layers in encoder or decoder during init'), 
-        'encoder': ('HGCN', 'which encoder to use, can be any of [Shallow, MLP, HNN, GCN, GAT, HyperGCN]'),
-        'decoder': ('HNN', 'which decoder to use, can be any of [Shallow, MLP, HNN, GCN, GAT, HyperGCN]'),
+        # init flags for neural nets
+        'enc_init': (1, 'flag indicating whether the encoder remains to be init-ed or not.'),
+        'dec_init': (1, 'flag indicating whether the decoder remains to be init-ed or not.'),
+        'pde_init': (2, 'flag indicating number of pde functions which remain to be init-ed.'),
+        
+        # which layers use time encodings and what dim should encodings be
+        'time_enc': ([0,1,1], 'whether to insert time encoding in encoder, decoder, and pde functions, respectively.'),
+        'time_dim': (2, 'dimension of time embedding'), 
+       
+        # input window size
+        'kappa': (60, 'size of lookback window used as input to encoder'),
+
+        # specify models. pde function layers are the same as the decoder layers by default.
+        'encoder': ('HGCN', 'which encoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
+        'decoder': ('HNN', 'which decoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
+        'pde': ('neural_burgers', 'which PDE to use for the PINN loss'),
+        
+        # dims of neural nets. -1 will be inferred based on args.skip and args.time_enc. 
         'enc_dims': ([60,24,5], 'dimensions of encoder layers'),
-        'dec_dims': ([-1,48,48,1],'dimensions of decoder layers'),
-        'skip': (1, 'whether to use skip connections in encoder or not'),
+        'dec_dims': ([-1,256,256,1],'dimensions of decoder layers'),
+        'pde_dims': ([-1,192,192,1], 'dimensions of each pde layers'),
+        
+        #activations for each network
+        'act_enc': ('relu', 'which activation function to use (or None for no activation)'),
+        'act_dec': ('silu', 'which activation function to use (or None for no activation)'),
+        'act_pde': ('silu', 'which activation function to use (or None for no activation)'),
+       
+        # additional params for layer specification
+        'bias': (1, 'whether to use bias in layers or not'),
+        'skip': (1, 'whether to use skip connections or not. set to 0 after encoder init.'),
         'manifold': ('Euclidean', 'which manifold to use, can be any of [Euclidean, Hyperboloid, PoincareBall]'),
         'c': (1.0, 'hyperbolic radius, set to None for trainable curvature'),
-        'bias': (1, 'whether to use bias (1) or not (0)'),
-        'act_enc': ('lrelu', 'which activation function to use (or None for no activation)'),
-        'act_dec': ('lrelu', 'which activation function to use (or None for no activation)'),
+        
+        # graph encoder params
         'n-heads': (4, 'number of attention heads for graph attention networks, must be a divisor dim'),
         'alpha': (0.2, 'alpha for leakyrelu in graph attention networks'),
         'double-precision': ('0', 'whether to use double precision'),
         'use-att': (0, 'whether to use hyperbolic attention or not'),
         'local-agg': (0, 'whether to local tangent space aggregation or not')
     },
-    'data_config': {
-        'dataset': ('cora', 'which dataset to use'),
-        'val-prop': (0.05, 'proportion of validation edges for link prediction'),
-        'test-prop': (0.1, 'proportion of test edges for link prediction'),
-        'use-feats': (1, 'whether to use node features or not'),
-        'normalize-feats': (1, 'whether to normalize input node features'),
-        'normalize-adj': (1, 'whether to row-normalize the adjacency matrix'),
-        'split-seed': (1234, 'seed for data splits (train/test/val)'),
-    }
+    #'data_config': {
+    #    'dataset': ('cora', 'which dataset to use'),
+    #    'val-prop': (0.05, 'proportion of validation edges for link prediction'),
+    #    'test-prop': (0.1, 'proportion of test edges for link prediction'),
+    #    'use-feats': (1, 'whether to use node features or not'),
+    #    'normalize-feats': (1, 'whether to normalize input node features'),
+    #    'normalize-adj': (1, 'whether to row-normalize the adjacency matrix'),
+    #    'split-seed': (1234, 'seed for data splits (train/test/val)'),
+    #}
 }
 
 parser = argparse.ArgumentParser()

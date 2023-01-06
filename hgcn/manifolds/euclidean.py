@@ -1,24 +1,25 @@
 """Euclidean manifold."""
 
 from manifolds.base import Manifold
+import jax
 
+prng_key = jax.random.PRNGKey(0)
 
 class Euclidean(Manifold):
     """
     Euclidean Manifold class.
     """
-
+    name: str
     def __init__(self):
         super(Euclidean, self).__init__()
         self.name = 'Euclidean'
 
     def normalize(self, p):
-        dim = p.size(-1)
-        p.view(-1, dim).renorm_(2, 0, 1.)
+        p = p/jnp.linalg.norm(a, ord=2, axis=1, keepdims=True)
         return p
 
     def sqdist(self, p1, p2, c):
-        return (p1 - p2).pow(2).sum(dim=-1)
+        return jnp.square(p1 - p2).sum(axis=-1)
 
     def egrad2rgrad(self, p, dp, c):
         return dp
@@ -48,17 +49,18 @@ class Euclidean(Manifold):
         return x + y
 
     def mobius_matvec(self, m, x, c):
-        mx = x @ m.transpose(-1, -2)
+        mx = x @ m.T
         return mx
 
     def init_weights(self, w, c, irange=1e-5):
-        w.data.uniform_(-irange, irange)
+        init_fn = jax.nn.initializers.glorot_uniform()
+        w = init_fn(prng_key,w.shape)
         return w
 
     def inner(self, p, c, u, v=None, keepdim=False):
         if v is None:
             v = u
-        return (u * v).sum(dim=-1, keepdim=keepdim)
+        return (u * v).sum(axis=-1, keepdims=keepdim)
 
     def ptransp(self, x, y, v, c):
         return v
