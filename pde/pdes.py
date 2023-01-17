@@ -1,6 +1,6 @@
 import sys
 
-from hgcn.models import models
+from nn.models import models
 
 import numpy as np
 import jax

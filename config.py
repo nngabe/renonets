@@ -1,6 +1,6 @@
 import argparse
 
-from hgcn.utils.train_utils import add_flags_from_config
+from nn.utils.train_utils import add_flags_from_config
 
 config_args = {
     'training_config': {
@@ -14,15 +14,9 @@ config_args = {
         'patience': (100, 'patience for early stopping'),
         'seed': (1234, 'seed for training'),
         'log-freq': (100, 'how often to compute print train/val metrics (in epochs)'),
-        'eval-freq': (1, 'how often to compute val metrics (in epochs)'),
         'save': (0, '1 to save model and logs and 0 otherwise'),
         'save-dir': (None, 'path to save training logs and model weights (defaults to logs/task/date/run/)'),
-        'sweep-c': (0, ''),
-        'lr-reduce-freq': (1000, 'reduce lr every lr-reduce-freq or None to keep lr constant'),
-        'gamma': (0.5, 'gamma for lr scheduler'),
-        'print-epoch': (True, ''),
-        'max-norm': (400., 'max norm for gradient clipping, or None for no gradient clipping'),
-        'min-epochs': (100, 'do not early stop before min-epochs')
+        'max-norm': (100., 'max norm for gradient clipping, or None for no gradient clipping'),
     },
     'model_config': {
         # init flags for neural nets
@@ -43,7 +37,7 @@ config_args = {
         'pde': ('neural_burgers', 'which PDE to use for the PINN loss'),
         
         # dims of neural nets. -1 will be inferred based on args.skip and args.time_enc. 
-        'enc_dims': ([60,24,5], 'dimensions of encoder layers'),
+        'enc_dims': ([-1,24,5], 'dimensions of encoder layers'),
         'dec_dims': ([-1,256,256,1],'dimensions of decoder layers'),
         'pde_dims': ([-1,192,192,1], 'dimensions of each pde layers'),
         
