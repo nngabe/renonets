@@ -73,3 +73,11 @@ config_args = {
 parser = argparse.ArgumentParser()
 for _, config_dict in config_args.items():
     parser = add_flags_from_config(parser, config_dict)
+args = parser.parse_args()
+args.enc_dims[0] = args.kappa
+if args.skip: 
+    args.dec_dims[0] = sum(args.enc_dims) + args.time_enc[1] * args.time_dim * 2
+    args.pde_dims[0] = args.dec_dims[0]
+else: 
+    args.dec_dims[0] = args.enc_dims[-1] + args.time_enc[1] * args.time_dim * 2
+    args.pde_dims[0] = args.dec_dims[0]

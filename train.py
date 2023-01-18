@@ -2,6 +2,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 import sys
+import copy
 from typing import Any, Optional, Sequence, Tuple, Union
 
 #from hgcn import optimizers
@@ -75,7 +76,7 @@ def compute_val_grad(x0, adj, t, tau, model):
 def compute_loss(model, x0, adj, t, tau, y, w, p = 0.8):
     (u, txz), grad_tx = compute_val_grad(x0, adj, t, tau, model)
     grad_t, grad_x = grad_tx[:,:1], grad_tx[:,1:]
-    mask = jax.random.bernoulli(prng(),p=p,shape=u.shape))
+    mask = jax.random.bernoulli(prng(),p=p,shape=u.shape)
     loss_data = (jax.lax.square(u - y) * mask).sum()
     resid = model.pde.res(u, txz, grad_t, grad_x)
     loss_pde = (jax.lax.square(resid) * mask).sum()
@@ -106,14 +107,7 @@ clt = lambda xi,ti,yi: [loss.mean() for loss in jax.vmap(lambda x,t,y: compute_l
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    
-    args.enc_dims[0] = args.kappa
-    if args.skip: 
-        args.dec_dims[0] = sum(args.enc_dims) + args.time_enc[1] * args.time_dim * 2
-        args.pde_dims[0] = args.dec_dims[0]
-    else: 
-        args.dec_dims[0] = args.enc_dims[-1] + args.time_enc[1] * args.time_dim * 2
-        args.pde_dims[0] = args.dec_dims[0]
+    args0 = copy.copy(args)
 
     A = pd.read_csv('../data_hpgn/adj_499.csv',index_col=0).to_numpy()
     adj = jnp.array(jnp.where(A))
@@ -194,7 +188,7 @@ if __name__ == '__main__':
                 df.columns = ['data']
                 df.plot(ax=ax, color='k', marker='o', markersize=5, markerfacecolor='none', linestyle='none')
     
-    def call(x0, t, tau, adj):
+    def call(model, x0, t, tau, adj):
         z_x = model.encoder(x0, adj)
         z = z_x[:,:-model.x_dim]
         x = 0. * z_x[:,-model.x_dim:]
@@ -205,8 +199,8 @@ if __name__ == '__main__':
         txz = jnp.concatenate([t, tau, x, z], axis=1)
         return jax.vmap(model.decoder)(txz), txz
     
-    def inference(tau,i=0,j=-1,n=3):
-        m = lambda x,t: call(x,t,tau,adj)
+    def inference(model, tau, i=0, j=-1, n=3):
+        m = lambda x,t: call(model,x,t,tau,adj)
         tp = jnp.linspace(0,T-tau[0],T+1-tau[0])
         idx = tp.astype(int).flatten()
         xp = _batch(x,tp.astype(int).flatten())[:,:n]
@@ -214,3 +208,7 @@ if __name__ == '__main__':
         u = res[0].squeeze()
         y = x[:,idx+tau].T
         plot(u, y, tau, i, j, n)
+
+    def save_model(path='../eqx_models'):
+        if not os.path.exists(path): os.mkdir(path)
+        eqx.tree_serialise_leaves('cosynn.eqx', model)
