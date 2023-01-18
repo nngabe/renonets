@@ -1,1 +1,1 @@
-# hpgn
+# COSYNN: COmplex SYstem Neural Network
