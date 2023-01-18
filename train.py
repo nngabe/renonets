@@ -72,12 +72,13 @@ def compute_val_grad(x0, adj, t, tau, model):
     dvg = lambda t_x, z: decoder_val_grad(t_x, tau, z, model)
     return jax.vmap(dvg)(t_x, z)
 
-def compute_loss(model, x0, adj, t, tau, y, w):
+def compute_loss(model, x0, adj, t, tau, y, w, p = 0.8):
     (u, txz), grad_tx = compute_val_grad(x0, adj, t, tau, model)
     grad_t, grad_x = grad_tx[:,:1], grad_tx[:,1:]
-    loss_data = jax.lax.square(u - y).sum()
+    mask = jax.random.bernoulli(prng(),p=p,shape=u.shape))
+    loss_data = (jax.lax.square(u - y) * mask).sum()
     resid = model.pde.res(u, txz, grad_t, grad_x)
-    loss_pde = jax.lax.square(resid).sum()
+    loss_pde = (jax.lax.square(resid) * mask).sum()
     return w[0] * loss_data + w[1] * loss_pde
 
 @eqx.filter_jit
@@ -167,7 +168,7 @@ if __name__ == '__main__':
         mask = (d==0.)
         return yy[mask]
 
-    def plot(u,y,i=0,j=-1,n=4):
+    def plot(u,y,tau,i=0,j=-1,n=4):
         import matplotlib.pyplot as plt
         plt.rcParams['figure.figsize'] = [8,8]; plt.rcParams['font.size'] = 14; plt.rcParams['xtick.major.size'] = 8
         plt.rcParams['font.sans-serif'] = 'Computer Modern Sans Serif'; plt.rcParams['text.usetex'] = True
@@ -178,37 +179,38 @@ if __name__ == '__main__':
 
         for k in range(n):
             if k == 0 : 
-                ax = pd.DataFrame(u[i:j,k],columns=[rf'$G_{k+1}(t)$ PINN[{args.encoder},{args.decoder}]']).shift(60).dropna().plot(color=colors[k])
+                ax = pd.DataFrame(u[i:j,k],columns=[rf'$G_{k+1}(t)$ PINN[{args.encoder},{args.decoder}]']).shift(-tau.item()).dropna().plot(color=colors[k])
                 df = mask_plot(y[i:j,k])
                 df.columns = ['_none']
                 df.plot(ax=ax, color=colors[k], marker='o', markersize=5, markerfacecolor='none', linestyle='none') 
             elif k < n-1 : 
-                pd.DataFrame(u[i:j,k],columns=[rf'$G_{k+1}(t)$ PINN[{args.encoder},{args.decoder}]']).shift(60).dropna().plot(ax=ax, color=colors[k])
+                pd.DataFrame(u[i:j,k],columns=[rf'$G_{k+1}(t)$ PINN[{args.encoder},{args.decoder}]']).shift(-tau.item()).dropna().plot(ax=ax, color=colors[k])
                 df = mask_plot(y[i:j,k])
                 df.columns = ['_none']
                 df.plot(ax=ax, color=colors[k], marker='o', markersize=5, markerfacecolor='none', linestyle='none') 
             elif k == n-1 :
-                pd.DataFrame(u[i:j,k],columns=[rf'$G_{k+1}(t)$ PINN[{args.encoder},{args.decoder}]']).shift(60).dropna().plot(ax=ax, color='C7')
+                pd.DataFrame(u[i:j,k],columns=[rf'$G_{k+1}(t)$ PINN[{args.encoder},{args.decoder}]']).shift(-tau.item()).dropna().plot(ax=ax, color='C7')
                 df = mask_plot(y[i:j,k])
                 df.columns = ['data']
                 df.plot(ax=ax, color='k', marker='o', markersize=5, markerfacecolor='none', linestyle='none')
     
-    def call(x0, t, adj):
+    def call(x0, t, tau, adj):
         z_x = model.encoder(x0, adj)
         z = z_x[:,:-model.x_dim]
-        #x = z_x[:,-model.x_dim:]
         x = 0. * z_x[:,-model.x_dim:]
         t = t*jnp.ones((x.shape[0],1))
+        tau = tau*jnp.ones((x.shape[0],1))
         t = jax.vmap(model.time_encode)(t)
-        txz = jnp.concatenate([t, x, z], axis=1)
+        tau = jax.vmap(model.time_encode)(tau)
+        txz = jnp.concatenate([t, tau, x, z], axis=1)
         return jax.vmap(model.decoder)(txz), txz
     
-    def inference(i=0,j=-1,n=3):
-        m = lambda x,t: call(x,t,adj)
-        tp = jnp.linspace(0,T-tau,T+1-tau)
+    def inference(tau,i=0,j=-1,n=3):
+        m = lambda x,t: call(x,t,tau,adj)
+        tp = jnp.linspace(0,T-tau[0],T+1-tau[0])
         idx = tp.astype(int).flatten()
         xp = _batch(x,tp.astype(int).flatten())[:,:n]
         res = jax.vmap(m)(xp,tp)
         u = res[0].squeeze()
         y = x[:,idx+tau].T
-        plot(u, y, i, j, n)
+        plot(u, y, tau, i, j, n)
