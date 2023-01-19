@@ -157,4 +157,4 @@ if __name__ == '__main__':
             loss_data, loss_pde = clt(xi, ti, yi)
             print(f'{i}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
 
-    lib.save_model(model)
+    utils.save_model(model)
