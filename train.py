@@ -76,10 +76,10 @@ def compute_val_grad(x0, adj, t, tau, model):
 def compute_loss(model, x0, adj, t, tau, y, w, p = 0.8):
     (u, txz), grad_tx = compute_val_grad(x0, adj, t, tau, model)
     grad_t, grad_x = grad_tx[:,:1], grad_tx[:,1:]
-    mask = jax.random.bernoulli(prng(),p=p,shape=u.shape)
-    loss_data = (jax.lax.square(u - y) * mask).sum()
+    #mask = jax.random.bernoulli(prng(),p=p,shape=u.shape)
+    loss_data = (jax.lax.square(u - y)).sum()
     resid = model.pde.res(u, txz, grad_t, grad_x)
-    loss_pde = (jax.lax.square(resid) * mask).sum()
+    loss_pde = (jax.lax.square(resid)).sum()
     return w[0] * loss_data + w[1] * loss_pde
 
 @eqx.filter_jit
@@ -112,17 +112,19 @@ if __name__ == '__main__':
     A = pd.read_csv('../data_hpgn/adj_499.csv',index_col=0).to_numpy()
     adj = jnp.array(jnp.where(A))
     x = jnp.array(pd.read_csv('../data_hpgn/gels_499_k2.csv',index_col=0).dropna().to_numpy().T)
-
     n,T = x.shape
     tau = jnp.array([60])
 
     model = COSYNN(args)
+    
+    print()
     print(f'MODULE: MODEL[DIMS](curv)')
     print(f' encoder: {args.encoder}{args.enc_dims}({args.c})')
     print(f' decoder: {args.decoder}{args.dec_dims}({args.c})')
     print(f' pde: {args.pde}/{args.decoder}{args.pde_dims}({args.c})')
     print(f' time_enc: linlog[{args.time_dim}]')
-
+    print()
+    
     schedule = optax.warmup_exponential_decay_schedule(args.lr, peak_value=args.lr, warmup_steps=args.epochs//10,
                                                         transition_steps=args.epochs, decay_rate=1e-2, end_value=args.lr/1e+3)
     optim = optax.chain(optax.clip(args.max_norm),optax.adam(schedule)) 
