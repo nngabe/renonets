@@ -93,7 +93,7 @@ class HypLinear(eqx.Module):
         self.weight = init_weights(prng_key,self.weight.shape)
 
     def __call__(self, x):
-        drop_weight = self.dropout(self.weight)  
+        drop_weight = dropout(self.p)(self.weight, inference=False, key=prng_key)  #self.dropout(self.weight)  
         mv = self.manifold.mobius_matvec(drop_weight, x, self.c)
         res = self.manifold.proj(mv, self.c)
         #if self.use_bias:
