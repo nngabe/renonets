@@ -72,7 +72,7 @@ class HypLinear(eqx.Module):
     Hyperbolic linear layer_
     """
     p: float
-    dropout: Callable
+    dropout: eqx.nn.Dropout
     manifold: manifolds.base.Manifold
     c: float
     bias: jax.numpy.ndarray
@@ -81,7 +81,7 @@ class HypLinear(eqx.Module):
     def __init__(self, manifold, in_features, out_features, c, p, use_bias):
         super(HypLinear, self).__init__()
         self.p = p
-        self.dropout = lambda x: dropout(self.p)(x, inference=False, key=prng_key)
+        self.dropout = eqx.nn.Dropout #lambda x: dropout(self.p)(x, inference=False, key=prng_key)
         self.manifold = manifold
         self.c = c
         self.bias = jnp.zeros((out_features,1)) 
@@ -93,7 +93,7 @@ class HypLinear(eqx.Module):
         self.weight = init_weights(prng_key,self.weight.shape)
 
     def __call__(self, x):
-        drop_weight = dropout(self.p)(self.weight, inference=False, key=prng_key)  #self.dropout(self.weight)  
+        drop_weight = self.dropout(self.p)(self.weight, key=prng_key)  
         mv = self.manifold.mobius_matvec(drop_weight, x, self.c)
         res = self.manifold.proj(mv, self.c)
         #if self.use_bias:
