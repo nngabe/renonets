@@ -41,7 +41,7 @@ def get_dim_act(args):
         dims = args.pde_dims
         args.pde_init -= 1
     else:
-        print('All layers already init-ed! Define additional layers if needed.')
+        print('All layers already init-ed! Define additional layers or reset args.')
         raise
 
     return dims, act

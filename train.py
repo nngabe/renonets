@@ -106,7 +106,7 @@ def compute_loss_terms(model, x0, adj, t, tau, y, w):
     resid = model.pde.res(u, txz, grad_t, grad_x)
     loss_pde = jax.lax.square(resid).sum()    
     return loss_data, loss_pde
-clt = lambda xi,ti,yi: [loss.mean() for loss in jax.vmap(lambda x,t,y: compute_loss_terms(model, x, adj, t, tau, y, w))(xi,ti,yi)]
+clt = lambda model,xi,ti,yi: [loss.mean() for loss in jax.vmap(lambda x,t,y: compute_loss_terms(model, x, adj, t, tau, y, w))(xi,ti,yi)]
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -154,7 +154,10 @@ if __name__ == '__main__':
             xi = _batch(x, idx)
             loss, grad = loss_batch(model, xi, adj, ti, tau, yi, w) 
             model, opt_state = make_step(grad, model, opt_state)
-            loss_data, loss_pde = clt(xi, ti, yi)
+            loss_data, loss_pde = clt(model, xi, ti, yi)
             print(f'{i}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
-
+            model = eqx.tree_inference(model, value=True)
+            loss_data, loss_pde = clt(model, xi, ti, yi)
+            print(f'{i}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
+            
     utils.save_model(model)
