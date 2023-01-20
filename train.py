@@ -127,7 +127,7 @@ if __name__ == '__main__':
     print(f' pde: {args.pde}/{args.decoder}{args.pde_dims}({args.c})')
     print(f' time_enc: linlog[{args.time_dim}]')
     print()
-    sys.exit(0) 
+     
     schedule = optax.warmup_exponential_decay_schedule(args.lr, peak_value=args.lr, warmup_steps=args.epochs//10,
                                                         transition_steps=args.epochs, decay_rate=1e-2, end_value=args.lr/1e+3)
     optim = optax.chain(optax.clip(args.max_norm),optax.adam(schedule)) 
