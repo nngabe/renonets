@@ -159,5 +159,5 @@ if __name__ == '__main__':
             model = eqx.tree_inference(model, value=True)
             loss_data, loss_pde = clt(model, xi, ti, yi)
             print(f'{i}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
-            
+            model = eqx.tree_inference(model, value=False) 
     utils.save_model(model)
