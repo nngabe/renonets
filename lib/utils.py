@@ -1,4 +1,5 @@
 import os
+import time
 import equinox as eqx
 import matplotlib.pyplot as plt
 import pandas as pd
