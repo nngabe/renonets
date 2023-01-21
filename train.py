@@ -110,7 +110,7 @@ clt = lambda model,xi,ti,yi: [loss.mean() for loss in jax.vmap(lambda x,t,y: com
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    args0 = copy.copy(args)
+    log  = copy.copy(args)
 
     A = pd.read_csv('../data_hpgn/adj_499.csv',index_col=0).to_numpy()
     adj = jnp.array(jnp.where(A))
@@ -154,10 +154,10 @@ if __name__ == '__main__':
             xi = _batch(x, idx)
             loss, grad = loss_batch(model, xi, adj, ti, tau, yi, w) 
             model, opt_state = make_step(grad, model, opt_state)
-            loss_data, loss_pde = clt(model, xi, ti, yi)
-            print(f'{i}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
+            #loss_data, loss_pde = clt(model, xi, ti, yi)
+            #print(f'{i}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
             model = eqx.tree_inference(model, value=True)
             loss_data, loss_pde = clt(model, xi, ti, yi)
             print(f'{i}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
-            model = eqx.tree_inference(model, value=False) 
+            if i%(3*args.log_freq) == 0 and i < args.epochs * .5: model = eqx.tree_inference(model, value=False) 
     utils.save_model(model)

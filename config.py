@@ -5,7 +5,7 @@ from nn.utils.train_utils import add_flags_from_config
 config_args = {
     'training_config': {
         'lr': (0.005, 'learning rate'),
-        'dropout': (0.05, 'dropout probability'),
+        'dropout': (0.02, 'dropout probability'),
         'epochs': (20000, 'maximum number of epochs to train for'),
         'weight-decay': (0., 'l2 regularization strength'),
         'optimizer': ('Adam', 'which optimizer to use, can be any of [Adam, RiemannianAdam]'),

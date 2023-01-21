@@ -66,6 +66,9 @@ def inference(model, tau, i=0, j=-1, n=3):
     y = x[:,idx+tau].T
     plot(u, y, tau, i, j, n)
 
-def save_model(model,path='../eqx_models'):
+def save_model(model, log, path='../eqx_models'):
     if not os.path.exists(path): os.mkdir(path)
-    eqx.tree_serialise_leaves('cosynn.eqx', model)
+    time_str = str(int(time.time()))
+    with open(f'log_{time_str}.pkl','wb') as f: 
+        pickle.dump(vars(log),f)
+    eqx.tree_serialise_leaves(path + '/cosynn.eqx', model)
