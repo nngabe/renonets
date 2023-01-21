@@ -1,5 +1,6 @@
 import os
 import time
+import pickle
 import equinox as eqx
 import matplotlib.pyplot as plt
 import pandas as pd
