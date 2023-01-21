@@ -20,7 +20,7 @@ def mask_plot(y):
     mask = (d==0.)
     return yy[mask]
 
-def plot(u,y,tau,i=0,j=-1,n=4):
+def plot(u,y,tau,i=0,j=-1,n=4,offset=0):
     plt.rcParams['figure.figsize'] = [8,8]; plt.rcParams['font.size'] = 14; plt.rcParams['xtick.major.size'] = 8
     plt.rcParams['font.sans-serif'] = 'Computer Modern Sans Serif'; plt.rcParams['text.usetex'] = True
     u = onp.array(u)
@@ -30,17 +30,17 @@ def plot(u,y,tau,i=0,j=-1,n=4):
 
     for k in range(n):
         if k == 0 : 
-            ax = pd.DataFrame(u[i:j,k],columns=[rf'$G_{k+1}(t)$ PINN[{args.encoder},{args.decoder}]']).shift(-tau.item()).dropna().plot(color=colors[k])
+            ax = pd.DataFrame(u[i:j,k],columns=[rf'$G_{k+1}(t)$ PINN[{args.encoder},{args.decoder}]']).shift(offset).dropna().plot(color=colors[k])
             df = mask_plot(y[i:j,k])
             df.columns = ['_none']
             df.plot(ax=ax, color=colors[k], marker='o', markersize=5, markerfacecolor='none', linestyle='none') 
         elif k < n-1 : 
-            pd.DataFrame(u[i:j,k],columns=[rf'$G_{k+1}(t)$ PINN[{args.encoder},{args.decoder}]']).shift(-tau.item()).dropna().plot(ax=ax, color=colors[k])
+            pd.DataFrame(u[i:j,k],columns=[rf'$G_{k+1}(t)$ PINN[{args.encoder},{args.decoder}]']).shift(offset).dropna().plot(ax=ax, color=colors[k])
             df = mask_plot(y[i:j,k])
             df.columns = ['_none']
             df.plot(ax=ax, color=colors[k], marker='o', markersize=5, markerfacecolor='none', linestyle='none') 
         elif k == n-1 :
-            pd.DataFrame(u[i:j,k],columns=[rf'$G_{k+1}(t)$ PINN[{args.encoder},{args.decoder}]']).shift(-tau.item()).dropna().plot(ax=ax, color='C7')
+            pd.DataFrame(u[i:j,k],columns=[rf'$G_{k+1}(t)$ PINN[{args.encoder},{args.decoder}]']).shift(offset).dropna().plot(ax=ax, color='C7')
             df = mask_plot(y[i:j,k])
             df.columns = ['data']
             df.plot(ax=ax, color='k', marker='o', markersize=5, markerfacecolor='none', linestyle='none')
@@ -69,6 +69,6 @@ def inference(model, tau, i=0, j=-1, n=3):
 def save_model(model, log, path='../eqx_models'):
     if not os.path.exists(path): os.mkdir(path)
     time_str = str(int(time.time()))
-    with open(f'log_{time_str}.pkl','wb') as f: 
+    with open(path + f'log_{time_str}.pkl','wb') as f: 
         pickle.dump(vars(log),f)
     eqx.tree_serialise_leaves(path + '/cosynn.eqx', model)

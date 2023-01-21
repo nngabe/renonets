@@ -110,11 +110,12 @@ clt = lambda model,xi,ti,yi: [loss.mean() for loss in jax.vmap(lambda x,t,y: com
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    log  = copy.copy(args)
+    log = {}
+    log['args'] = vars(args)
 
-    A = pd.read_csv('../data_hpgn/adj_499.csv',index_col=0).to_numpy()
+    A = pd.read_csv(args.adj_path, index_col=0).to_numpy()
     adj = jnp.array(jnp.where(A))
-    x = jnp.array(pd.read_csv('../data_hpgn/gels_499_k2.csv',index_col=0).dropna().to_numpy().T)
+    x = jnp.array(pd.read_csv(args.data_path, index_col=0).dropna().to_numpy().T)
     n,T = x.shape
     tau = jnp.array([60])
 
@@ -134,12 +135,13 @@ if __name__ == '__main__':
     opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
  
     w = jnp.array([1., 10.]) 
-    #sys.exit(0) 
+     
     def _batch(x,idx):
         xi = lambda i: x.at[:,i:i+model.kappa].get()
         xb = jnp.array([xi(i) for i in idx])
         return xb
     
+    log['loss'] = {}
     for i in range(args.epochs):
         ti = jax.random.randint(prng(), (50, 1), 1, T-model.kappa).astype(jnp.float32)
         idx = ti.astype(int).flatten()
@@ -154,10 +156,11 @@ if __name__ == '__main__':
             xi = _batch(x, idx)
             loss, grad = loss_batch(model, xi, adj, ti, tau, yi, w) 
             model, opt_state = make_step(grad, model, opt_state)
-            #loss_data, loss_pde = clt(model, xi, ti, yi)
-            #print(f'{i}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
+            
             model = eqx.tree_inference(model, value=True)
             loss_data, loss_pde = clt(model, xi, ti, yi)
+            log['loss'][i] = [loss_data, loss_pde]
             print(f'{i}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
             if i%(3*args.log_freq) == 0 and i < args.epochs * .5: model = eqx.tree_inference(model, value=False) 
-    utils.save_model(model)
+    
+    utils.save_model(model,log)

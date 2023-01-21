@@ -58,15 +58,15 @@ config_args = {
         'use-att': (0, 'whether to use hyperbolic attention or not'),
         'local-agg': (0, 'whether to local tangent space aggregation or not')
     },
-    #'data_config': {
-    #    'dataset': ('cora', 'which dataset to use'),
-    #    'val-prop': (0.05, 'proportion of validation edges for link prediction'),
+    'data_config': {
+        'data-path': ('../data_cosynn/gels_499_k2.csv', 'path for timeseries data'),
+        'adj-path': ('../data_cosynn/adj_499.csv', 'path for adjacency matrix'),
     #    'test-prop': (0.1, 'proportion of test edges for link prediction'),
     #    'use-feats': (1, 'whether to use node features or not'),
     #    'normalize-feats': (1, 'whether to normalize input node features'),
     #    'normalize-adj': (1, 'whether to row-normalize the adjacency matrix'),
     #    'split-seed': (1234, 'seed for data splits (train/test/val)'),
-    #}
+    }
 }
 
 parser = argparse.ArgumentParser()
