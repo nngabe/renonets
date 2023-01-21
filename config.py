@@ -41,7 +41,7 @@ config_args = {
         'pde_dims': ([-1,192,192,1], 'dimensions of each pde layers'),
         
         #activations for each network
-        'act_enc': ('relu', 'which activation function to use (or None for no activation)'),
+        'act_enc': ('silu', 'which activation function to use (or None for no activation)'),
         'act_dec': ('silu', 'which activation function to use (or None for no activation)'),
         'act_pde': ('silu', 'which activation function to use (or None for no activation)'),
        

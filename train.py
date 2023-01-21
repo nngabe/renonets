@@ -160,7 +160,8 @@ if __name__ == '__main__':
             model = eqx.tree_inference(model, value=True)
             loss_data, loss_pde = clt(model, xi, ti, yi)
             log['loss'][i] = [loss_data, loss_pde]
-            print(f'{i}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
-            if i%(3*args.log_freq) == 0 and i < args.epochs * .5: model = eqx.tree_inference(model, value=False) 
+            print(f'{i:04d}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
+            if i%(3*args.log_freq) == 0 and i < args.epochs * .333: 
+                model = eqx.tree_inference(model, value=False) 
     
     utils.save_model(model,log)
