@@ -72,5 +72,5 @@ def save_model(model, log, path='../eqx_models'):
     if not os.path.exists(path): os.mkdir(path)
     time_str = str(int(time.time()))
     with open(path + f'log_{time_str}.pkl','wb') as f: 
-        pickle.dump(vars(log),f)
+        pickle.dump(log,f)
     eqx.tree_serialise_leaves(path + '/cosynn.eqx', model)
