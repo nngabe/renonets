@@ -20,9 +20,6 @@ import optax
 
 from lib import utils
 
-os.environ['XLA_PYTHON_CLIENT_MEM_FRACTION'] = '0.2'
-#os.environ['XLA_PYTHON_CLIENT_ALLOCATOR'] = 'platform'
-
 prng = lambda: jax.random.PRNGKey(onp.random.randint(1e+3))
 
 class COSYNN(eqx.Module):
@@ -161,7 +158,7 @@ if __name__ == '__main__':
             loss_data, loss_pde = clt(model, xi, ti, yi)
             log['loss'][i] = [loss_data, loss_pde]
             print(f'{i:04d}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
-            if i%(3*args.log_freq) == 0 and i < args.epochs * .333: 
+            if i%(3*args.log_freq) == 0 and i < args.epochs / 3: 
                 model = eqx.tree_inference(model, value=False) 
     
     utils.save_model(model,log)
