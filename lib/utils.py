@@ -11,7 +11,6 @@ def _batch(model,x,idx):
     xb = jnp.array([xi(i) for i in idx])
     return xb
 
-
 def mask_plot(y):
     yy = pd.DataFrame(onp.array(y))
     d = (yy.diff()**2. + .4).fillna(1.)
@@ -68,9 +67,9 @@ def inference(model, tau, i=0, j=-1, n=3):
     y = x[:,idx+tau].T
     plot(u, y, tau, i, j, n)
 
-def save_model(model, log, path='../eqx_models'):
+def save_model(model, log, path='../eqx_models/'):
     if not os.path.exists(path): os.mkdir(path)
     time_str = str(int(time.time()))
     with open(path + f'log_{time_str}.pkl','wb') as f: 
         pickle.dump(log,f)
-    eqx.tree_serialise_leaves(path + '/cosynn.eqx', model)
+    eqx.tree_serialise_leaves(path + f'/cosynn_{time_str}.eqx', model)
