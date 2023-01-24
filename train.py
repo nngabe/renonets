@@ -76,11 +76,13 @@ def compute_val_grad(x0, adj, t, tau, model):
 def compute_loss(model, x0, adj, t, tau, y, w, p = 0.8):
     (u, txz), grad_tx = compute_val_grad(x0, adj, t, tau, model)
     grad_t, grad_x = grad_tx[:,:1], grad_tx[:,1:]
-    #mask = jax.random.bernoulli(prng(),p=p,shape=u.shape)
-    loss_data = (jax.lax.square(u - y)).sum()
+    mask = jax.random.bernoulli(prng(), p=p, shape=u.shape)
+    loss_data = jax.lax.square(u - y)
     resid = model.pde.res(u, txz, grad_t, grad_x)
-    loss_pde = (jax.lax.square(resid)).sum()
-    return w[0] * loss_data + w[1] * loss_pde
+    loss_pde = jax.lax.square(resid).flatten()
+    loss_data *= mask
+    loss_pde *= mask
+    return w[0] * loss_data.sum() + w[1] * loss_pde.sum()
 
 @eqx.filter_jit
 @eqx.filter_value_and_grad
