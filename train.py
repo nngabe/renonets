@@ -19,6 +19,7 @@ import equinox as eqx
 import optax
 
 from lib import utils
+from lib.graph_utils import batch_graph, remove_nodes, add_self_loops
 
 prng = lambda: jax.random.PRNGKey(onp.random.randint(1e+3))
 
@@ -76,11 +77,13 @@ def compute_val_grad(x0, adj, t, tau, model):
 def compute_loss(model, x0, adj, t, tau, y, w, p = 0.8):
     (u, txz), grad_tx = compute_val_grad(x0, adj, t, tau, model)
     grad_t, grad_x = grad_tx[:,:1], grad_tx[:,1:]
-    #mask = jax.random.bernoulli(prng(),p=p,shape=u.shape)
-    loss_data = (jax.lax.square(u - y)).sum()
+    mask = jax.random.bernoulli(prng(), p=p, shape=u.shape)
+    loss_data = jax.lax.square(u - y)
     resid = model.pde.res(u, txz, grad_t, grad_x)
-    loss_pde = (jax.lax.square(resid)).sum()
-    return w[0] * loss_data + w[1] * loss_pde
+    loss_pde = jax.lax.square(resid).flatten()
+    loss_data *= mask
+    loss_pde *= mask
+    return w[0] * loss_data.sum() + w[1] * loss_pde.sum()
 
 @eqx.filter_jit
 @eqx.filter_value_and_grad
@@ -116,6 +119,10 @@ if __name__ == '__main__':
     n,T = x.shape
     tau = jnp.array([60])
 
+    adj = add_self_loops(adj)
+    idx_test, adj_test = batch_graph(0, adj)
+    idx_train, adj_train = remove_nodes(idx_test, adj)
+
     model = COSYNN(args)
     
     print()
@@ -125,7 +132,7 @@ if __name__ == '__main__':
     print(f' pde: {args.pde}/{args.decoder}{args.pde_dims}({args.c})')
     print(f' time_enc: linlog[{args.time_dim}]')
     print()
-     
+    sys.exit(0) 
     schedule = optax.warmup_exponential_decay_schedule(args.lr, peak_value=args.lr, warmup_steps=args.epochs//10,
                                                         transition_steps=args.epochs, decay_rate=1e-2, end_value=args.lr/1e+3)
     optim = optax.chain(optax.clip(args.max_norm),optax.adam(schedule)) 
@@ -140,7 +147,7 @@ if __name__ == '__main__':
     
     log['loss'] = {}
     for i in range(args.epochs):
-        ti = jax.random.randint(prng(), (50, 1), 1, T-model.kappa).astype(jnp.float32)
+        ti = jax.random.randint(prng(), (50, 1), 1, T - model.kappa).astype(jnp.float32)
         idx = ti.astype(int).flatten()
         yi = x[:,idx+tau].T 
         xi = _batch(x, idx)
