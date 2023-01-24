@@ -27,6 +27,7 @@ class COSYNN(eqx.Module):
     encoder: eqx.Module
     decoder: eqx.Module
     pde: eqx.Module
+    w: list
     x_dim: int
     t_dim: int
     kappa: int
@@ -39,6 +40,7 @@ class COSYNN(eqx.Module):
         self.encoder = getattr(models, args.encoder)(args)
         self.decoder = getattr(models, args.decoder)(args)
         self.pde = getattr(pdes, args.pde)(args)
+        self.w = [1.,10.]
         self.x_dim = args.enc_dims[-1]
         self.t_dim = args.time_dim
         self.kappa = args.kappa
@@ -53,7 +55,6 @@ class COSYNN(eqx.Module):
         t_log = jnp.log( t[self.k_log[0]:self.k_log[1]] + 1. )
         t = jnp.concatenate([t_lin, t_log])
         return t
-
 
 # functions for computing losses and gradients
 @eqx.filter_value_and_grad(has_aux = True)
@@ -74,7 +75,7 @@ def compute_val_grad(x0, adj, t, tau, model):
     dvg = lambda t_x, z: decoder_val_grad(t_x, tau, z, model)
     return jax.vmap(dvg)(t_x, z)
 
-def compute_loss(model, x0, adj, t, tau, y, w, p = 0.8):
+def compute_loss(model, x0, adj, t, tau, y, p = 0.8):
     (u, txz), grad_tx = compute_val_grad(x0, adj, t, tau, model)
     grad_t, grad_x = grad_tx[:,:1], grad_tx[:,1:]
     mask = jax.random.bernoulli(prng(), p=p, shape=u.shape)
@@ -83,12 +84,16 @@ def compute_loss(model, x0, adj, t, tau, y, w, p = 0.8):
     loss_pde = jax.lax.square(resid).flatten()
     loss_data *= mask
     loss_pde *= mask
-    return w[0] * loss_data.sum() + w[1] * loss_pde.sum()
+    return model.w[0] * loss_data.sum() + model.w[1] * loss_pde.sum()
+
+def loss_temporal_bundle(model, x0, adj, t, taus, y):
+    loss_tb = lambda tau: compute_loss(model, x0, adj, t, tau, y)
+    return jnp.mean(jnp.vmap(loss_tb)(taus))
 
 @eqx.filter_jit
 @eqx.filter_value_and_grad
-def loss_batch(model, xb, adj, tb, tau, yb, w):
-    lbatch = lambda x,t,y: compute_loss(model, x, adj, t, tau, y, w)
+def loss_batch(model, xb, adj, tb, tau, yb):
+    lbatch = lambda x,t,y: compute_loss(model, x, adj, t, tau, y)
     return jnp.mean(jax.vmap(lbatch)(xb,tb,yb))
 
 @eqx.filter_jit
@@ -99,7 +104,7 @@ def make_step(grads, model, opt_state):
 
 # utility functions for reporting or inference
 @eqx.filter_jit
-def compute_loss_terms(model, x0, adj, t, tau, y, w):
+def compute_loss_terms(model, x0, adj, t, tau, y):
     (u, txz), grad_tx = compute_val_grad(x0, adj, t, tau, model)
     grad_t, grad_x = grad_tx[:,0], grad_tx[:,1:]
     loss_data = jax.lax.square(u - y).sum()
@@ -133,12 +138,11 @@ if __name__ == '__main__':
     print(f' time_enc: linlog[{args.time_dim}]')
     print()
     sys.exit(0) 
+
     schedule = optax.warmup_exponential_decay_schedule(args.lr, peak_value=args.lr, warmup_steps=args.epochs//10,
                                                         transition_steps=args.epochs, decay_rate=1e-2, end_value=args.lr/1e+3)
     optim = optax.chain(optax.clip(args.max_norm),optax.adam(schedule)) 
     opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
- 
-    w = jnp.array([1., 10.]) 
      
     def _batch(x,idx):
         xi = lambda i: x.at[:,i:i+model.kappa].get()
@@ -160,12 +164,12 @@ if __name__ == '__main__':
             xi = _batch(x, idx)
             loss, grad = loss_batch(model, xi, adj, ti, tau, yi, w) 
             model, opt_state = make_step(grad, model, opt_state)
-            
+        if i % args.log_freq == 0:   
             model = eqx.tree_inference(model, value=True)
             loss_data, loss_pde = clt(model, xi, ti, yi)
             log['loss'][i] = [loss_data, loss_pde]
             print(f'{i:04d}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
-            if i%(3*args.log_freq) == 0 and i < args.epochs / 3: 
-                model = eqx.tree_inference(model, value=False) 
+        if i%(3*args.log_freq) == 0 and i < args.epochs / 3: 
+            model = eqx.tree_inference(model, value=False) 
     
     utils.save_model(model,log)
