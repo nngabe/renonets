@@ -98,12 +98,6 @@ def loss_bundle(model, xb, adj, tb, taus, yb):
     lbatch = lambda tau,y: loss_batch(model, xb, adj, tb, tau, y)
     return jnp.mean(jax.vmap(lbatch)(taus,yb))
 
-# updating model parameters and optimizer state
-@eqx.filter_jit
-def make_step(grads, model, opt_state):
-    updates, opt_state = optim.update(grads, opt_state)
-    model = eqx.apply_updates(model,updates)
-    return model, opt_state
 
 # utility functions for reporting or inference
 @eqx.filter_jit
@@ -114,7 +108,20 @@ def compute_loss_terms(model, x0, adj, t, tau, y):
     resid = model.pde.res(u, txz, grad_t, grad_x)
     loss_pde = jax.lax.square(resid).sum()    
     return loss_data, loss_pde
-clt = lambda model,xi,ti,yi: [loss.mean() for loss in jax.vmap(lambda x,t,y: compute_loss_terms(model, x, adj, t, tau, y))(xi,ti,yi)]
+def compute_batch_terms(model, xb, adj, tb, tau, yb):
+    clt = lambda x,t,y: compute_loss_terms(model, x, adj, t, tau, y)
+    return jnp.mean(jax.vmap(clt)(xb,tb,yb))
+def compute_bundle_terms(model, xb, adj, tb, taus, yb)  
+    cbt = lambda tau,y: compute_batch_terms(model, x, adj, t, tau, y)
+    return jax.vmap(cbt)(taus,yb)
+
+# updating model parameters and optimizer state
+@eqx.filter_jit
+def make_step(grads, model, opt_state):
+    updates, opt_state = optim.update(grads, opt_state)
+    model = eqx.apply_updates(model,updates)
+    return model, opt_state
+
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -169,8 +176,8 @@ if __name__ == '__main__':
         loss, grad = loss_bundle(model, xi, adj, ti, taus, yi)
         model, opt_state = make_step(grad, model, opt_state)
         if i % args.log_freq == 0:
-            ti = jnp.linspace(0., T - model.kappa, 100).reshape(-1,1)
-            idx = ti.astype(int).flatten() 
+            ti = jnp.linspace(args.kappa, T - args.tau_max , 100).reshape(-1,1)
+            idx = ti.astype(int)
             taus = jnp.arange(15,121,15)
             bundles = idx + taus
             yi = x[:,bundles].T
@@ -179,7 +186,7 @@ if __name__ == '__main__':
             model, opt_state = make_step(grad, model, opt_state)
         if i % args.log_freq == 0:   
             model = eqx.tree_inference(model, value=True)
-            loss_data, loss_pde = clt(model, xi, ti, yi)
+            loss_data, loss_pde = compute_bundle_terms(model, xi, adj, ti, taus, yi)
             log['loss'][i] = [loss_data, loss_pde]
             print(f'{i:04d}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
         if i%(3*args.log_freq) == 0 and i < args.epochs / 3: 
