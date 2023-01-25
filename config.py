@@ -31,9 +31,10 @@ config_args = {
         'time_enc': ([0,1,1], 'whether to insert time encoding in encoder, decoder, and pde functions, respectively.'),
         'time_dim': (2, 'dimension of time embedding'), 
        
-        # input window size
+        # input/output sizes
         'kappa': (60, 'size of lookback window used as input to encoder'),
-
+        'tau_max': (500, 'maximum steps ahead forecast'),
+        'tau_num': (10, 'number of tau steps for each training bundle'),
         # specify models. pde function layers are the same as the decoder layers by default.
         'encoder': ('HGCN', 'which encoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
         'decoder': ('HNN', 'which decoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
@@ -58,17 +59,14 @@ config_args = {
         # graph encoder params
         'n-heads': (4, 'number of attention heads for graph attention networks, must be a divisor dim'),
         'alpha': (0.2, 'alpha for leakyrelu in graph attention networks'),
-        'double-precision': ('0', 'whether to use double precision'),
         'use-att': (0, 'whether to use hyperbolic attention or not'),
         'local-agg': (0, 'whether to local tangent space aggregation or not')
     },
     'data_config': {
         'data-path': ('../data_cosynn/gels_499_k2.csv', 'path for timeseries data'),
         'adj-path': ('../data_cosynn/adj_499.csv', 'path for adjacency matrix'),
-    #    'test-prop': (0.1, 'proportion of test edges for link prediction'),
-    #    'use-feats': (1, 'whether to use node features or not'),
+        'test-prop': (0.1, 'proportion of test edges for link prediction'),
     #    'normalize-feats': (1, 'whether to normalize input node features'),
-    #    'normalize-adj': (1, 'whether to row-normalize the adjacency matrix'),
     #    'split-seed': (1234, 'seed for data splits (train/test/val)'),
     }
 }

@@ -88,22 +88,17 @@ def compute_loss(model, x0, adj, t, tau, y, p = 0.8):
     loss_pde *= mask
     return model.w_data * loss_data.sum() + model.w_pde * loss_pde.sum()
 
-def loss_temporal_bundle(model, x0, adj, t, taus, y):
-    loss_tb = lambda tau,y: compute_loss(model, x0, adj, t, tau, y)
-    return jnp.mean(jnp.vmap(loss_tb)(taus,yi))
-
-@eqx.filter_jit
-@eqx.filter_value_and_grad
 def loss_batch(model, xb, adj, tb, tau, yb):
-    lbatch = lambda x,t,y,tau: compute_loss(model, x, adj, t, tau, y)
-    return jnp.mean(jax.vmap(lbatch)(xb,tb,yb))
+    closs = lambda x,t,y: compute_loss(model, x, adj, t, tau, y)
+    return jnp.mean(jax.vmap(closs)(xb,tb,yb))
 
 @eqx.filter_jit
 @eqx.filter_value_and_grad
-def loss_batch_bundle(model, xb, adj, tb, tau, yb):
-    lbatch = lambda x,t,y: compute_loss(model, x, adj, t, tau, y)
-    return jnp.mean(jax.vmap(lbatch)(xb,tb,yb))
+def loss_bundle(model, xb, adj, tb, taus, yb):
+    lbatch = lambda tau,y: loss_batch(model, xb, adj, tb, tau, y)
+    return jnp.mean(jax.vmap(lbatch)(taus,yb))
 
+# updating model parameters and optimizer state
 @eqx.filter_jit
 def make_step(grads, model, opt_state):
     updates, opt_state = optim.update(grads, opt_state)
@@ -150,31 +145,37 @@ if __name__ == '__main__':
                                                         transition_steps=args.epochs, decay_rate=1e-2, end_value=args.lr/1e+3)
     optim = optax.chain(optax.clip(args.max_norm),optax.adam(schedule)) 
     opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
-     
+
+    @jax.jit
     def _batch(x,idx):
-        xi = lambda i: x.at[:,i:i+model.kappa].get()
-        xb = jnp.array([xi(i) for i in idx])
+        win = jnp.arange(1 - args.kappa, 1, 1)
+        xb = x.at[:, idx + win].get()
+        xb = jnp.swapaxes(xb,0,1)
         return xb
 
-    def _taus(i,size=10):
+    def _taus(i, size=args.tau_num, tau_max=args.tau_max):
         taus = jnp.array(10 * onp.random.exponential(2. + i/500., size), dtype=jnp.int32)
-        taus = jnp.clip(taus, 1, 400)
+        taus = jnp.clip(taus, 1, tau_max)
         return taus
-    
+      
     log['loss'] = {}
     for i in range(args.epochs):
-        ti = jax.random.randint(prng(), (50, 1), 1, T - model.kappa).astype(jnp.float32)
-        idx = ti.astype(int).flatten()
-        yi = x[:,idx+tau].T 
+        ti = jax.random.randint(prng(), (50, 1), args.kappa, T - args.tau_max).astype(jnp.float32)
+        idx = ti.astype(int)
+        taus = _taus(i)
+        bundles = idx + taus
+        yi = x[:,bundles].T
         xi = _batch(x, idx)
-        loss, grad = loss_batch(model, xi, adj, ti, tau, yi)
+        loss, grad = loss_bundle(model, xi, adj, ti, taus, yi)
         model, opt_state = make_step(grad, model, opt_state)
         if i % args.log_freq == 0:
-            ti = jnp.linspace(0., T - model.kappa, 1000).reshape(-1,1)
+            ti = jnp.linspace(0., T - model.kappa, 100).reshape(-1,1)
             idx = ti.astype(int).flatten() 
-            yi = x[:,idx+tau].T 
+            taus = jnp.arange(15,121,15)
+            bundles = idx + taus
+            yi = x[:,bundles].T
             xi = _batch(x, idx)
-            loss, grad = loss_batch(model, xi, adj, ti, tau, yi) 
+            loss, grad = loss_bundle(model, xi, adj, ti, tau, yi) 
             model, opt_state = make_step(grad, model, opt_state)
         if i % args.log_freq == 0:   
             model = eqx.tree_inference(model, value=True)
