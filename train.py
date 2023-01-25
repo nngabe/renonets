@@ -100,7 +100,6 @@ def loss_bundle(model, xb, adj, tb, taus, yb):
 
 
 # utility functions for reporting or inference
-@eqx.filter_jit
 def compute_loss_terms(model, x0, adj, t, tau, y):
     (u, txz), grad_tx = compute_val_grad(x0, adj, t, tau, model)
     grad_t, grad_x = grad_tx[:,0], grad_tx[:,1:]
@@ -110,9 +109,10 @@ def compute_loss_terms(model, x0, adj, t, tau, y):
     return loss_data, loss_pde
 def compute_batch_terms(model, xb, adj, tb, tau, yb):
     clt = lambda x,t,y: compute_loss_terms(model, x, adj, t, tau, y)
-    return jnp.mean(jax.vmap(clt)(xb,tb,yb))
-def compute_bundle_terms(model, xb, adj, tb, taus, yb)  
-    cbt = lambda tau,y: compute_batch_terms(model, x, adj, t, tau, y)
+    return jax.vmap(clt)(xb,tb,yb)
+@eqx.filter_jit
+def compute_bundle_terms(model, xb, adj, tb, taus, yb):
+    cbt = lambda tau,y: compute_batch_terms(model, xb, adj, tb, tau, y)
     return jax.vmap(cbt)(taus,yb)
 
 # updating model parameters and optimizer state
@@ -182,11 +182,12 @@ if __name__ == '__main__':
             bundles = idx + taus
             yi = x[:,bundles].T
             xi = _batch(x, idx)
-            loss, grad = loss_bundle(model, xi, adj, ti, tau, yi) 
+            loss, grad = loss_bundle(model, xi, adj, ti, taus, yi)
             model, opt_state = make_step(grad, model, opt_state)
         if i % args.log_freq == 0:   
             model = eqx.tree_inference(model, value=True)
-            loss_data, loss_pde = compute_bundle_terms(model, xi, adj, ti, taus, yi)
+            terms = compute_bundle_terms(model, xi, adj, ti, taus, yi)
+            loss_data, loss_pde = terms[0].mean(), terms[1].mean()
             log['loss'][i] = [loss_data, loss_pde]
             print(f'{i:04d}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
         if i%(3*args.log_freq) == 0 and i < args.epochs / 3: 
