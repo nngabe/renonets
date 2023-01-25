@@ -27,7 +27,8 @@ class COSYNN(eqx.Module):
     encoder: eqx.Module
     decoder: eqx.Module
     pde: eqx.Module
-    w: list
+    w_data: jnp.float32
+    w_pde: jnp.float32
     x_dim: int
     t_dim: int
     kappa: int
@@ -40,7 +41,8 @@ class COSYNN(eqx.Module):
         self.encoder = getattr(models, args.encoder)(args)
         self.decoder = getattr(models, args.decoder)(args)
         self.pde = getattr(pdes, args.pde)(args)
-        self.w = [1.,10.]
+        self.w_data = args.w_data
+        self.w_pde = args.w_pde
         self.x_dim = args.enc_dims[-1]
         self.t_dim = args.time_dim
         self.kappa = args.kappa
@@ -84,15 +86,21 @@ def compute_loss(model, x0, adj, t, tau, y, p = 0.8):
     loss_pde = jax.lax.square(resid).flatten()
     loss_data *= mask
     loss_pde *= mask
-    return model.w[0] * loss_data.sum() + model.w[1] * loss_pde.sum()
+    return model.w_data * loss_data.sum() + model.w_pde * loss_pde.sum()
 
 def loss_temporal_bundle(model, x0, adj, t, taus, y):
-    loss_tb = lambda tau: compute_loss(model, x0, adj, t, tau, y)
-    return jnp.mean(jnp.vmap(loss_tb)(taus))
+    loss_tb = lambda tau,y: compute_loss(model, x0, adj, t, tau, y)
+    return jnp.mean(jnp.vmap(loss_tb)(taus,yi))
 
 @eqx.filter_jit
 @eqx.filter_value_and_grad
 def loss_batch(model, xb, adj, tb, tau, yb):
+    lbatch = lambda x,t,y,tau: compute_loss(model, x, adj, t, tau, y)
+    return jnp.mean(jax.vmap(lbatch)(xb,tb,yb))
+
+@eqx.filter_jit
+@eqx.filter_value_and_grad
+def loss_batch_bundle(model, xb, adj, tb, tau, yb):
     lbatch = lambda x,t,y: compute_loss(model, x, adj, t, tau, y)
     return jnp.mean(jax.vmap(lbatch)(xb,tb,yb))
 
@@ -111,7 +119,7 @@ def compute_loss_terms(model, x0, adj, t, tau, y):
     resid = model.pde.res(u, txz, grad_t, grad_x)
     loss_pde = jax.lax.square(resid).sum()    
     return loss_data, loss_pde
-clt = lambda model,xi,ti,yi: [loss.mean() for loss in jax.vmap(lambda x,t,y: compute_loss_terms(model, x, adj, t, tau, y, w))(xi,ti,yi)]
+clt = lambda model,xi,ti,yi: [loss.mean() for loss in jax.vmap(lambda x,t,y: compute_loss_terms(model, x, adj, t, tau, y))(xi,ti,yi)]
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -137,7 +145,6 @@ if __name__ == '__main__':
     print(f' pde: {args.pde}/{args.decoder}{args.pde_dims}({args.c})')
     print(f' time_enc: linlog[{args.time_dim}]')
     print()
-    sys.exit(0) 
 
     schedule = optax.warmup_exponential_decay_schedule(args.lr, peak_value=args.lr, warmup_steps=args.epochs//10,
                                                         transition_steps=args.epochs, decay_rate=1e-2, end_value=args.lr/1e+3)
@@ -148,6 +155,11 @@ if __name__ == '__main__':
         xi = lambda i: x.at[:,i:i+model.kappa].get()
         xb = jnp.array([xi(i) for i in idx])
         return xb
+
+    def _taus(i,size=10):
+        taus = jnp.array(10 * onp.random.exponential(2. + i/500., size), dtype=jnp.int32)
+        taus = jnp.clip(taus, 1, 400)
+        return taus
     
     log['loss'] = {}
     for i in range(args.epochs):
@@ -155,14 +167,14 @@ if __name__ == '__main__':
         idx = ti.astype(int).flatten()
         yi = x[:,idx+tau].T 
         xi = _batch(x, idx)
-        loss, grad = loss_batch(model, xi, adj, ti, tau, yi, w)
+        loss, grad = loss_batch(model, xi, adj, ti, tau, yi)
         model, opt_state = make_step(grad, model, opt_state)
         if i % args.log_freq == 0:
             ti = jnp.linspace(0., T - model.kappa, 1000).reshape(-1,1)
             idx = ti.astype(int).flatten() 
             yi = x[:,idx+tau].T 
             xi = _batch(x, idx)
-            loss, grad = loss_batch(model, xi, adj, ti, tau, yi, w) 
+            loss, grad = loss_batch(model, xi, adj, ti, tau, yi) 
             model, opt_state = make_step(grad, model, opt_state)
         if i % args.log_freq == 0:   
             model = eqx.tree_inference(model, value=True)

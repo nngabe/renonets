@@ -23,6 +23,10 @@ config_args = {
         'dec_init': (1, 'flag indicating whether the decoder remains to be init-ed or not.'),
         'pde_init': (2, 'flag indicating number of pde functions which remain to be init-ed.'),
         
+        # loss weights
+        'w_data': (1., 'weight for data loss'),
+        'w_pde': (10., 'weight for pde loss'),
+
         # which layers use time encodings and what dim should encodings be
         'time_enc': ([0,1,1], 'whether to insert time encoding in encoder, decoder, and pde functions, respectively.'),
         'time_dim': (2, 'dimension of time embedding'), 
