@@ -29,18 +29,20 @@ def subgraph(
 
     if relabel_nodes:
         node_idx = jnp.zeros(node_mask.size, dtype=jnp.int32)
-        node_idx.at[subset].set( jnp.arange(subset.sum().item()) )
+        node_idx = node_idx.at[subset].set( jnp.arange(subset.shape[0]) )
         edge_index = node_idx[edge_index]
 
     return edge_index, edge_attr 
 
 def batch_graph(
-    nodes_start: Union[jnp.ndarray, List[int]], 
+    nodes: Union[jnp.ndarray, List[int]], 
     edge_index: jnp.array, 
-    batch_size: int = 100
+    batch_size: int = 100,
+    relabel_nodes: bool = True
     ):
 
-    nodes = jnp.array(nodes_start)
+    if not isinstance(nodes, jnp.ndarray): nodes = jnp.array(nodes)
+    
     num_nodes = jnp.unique(jnp.concatenate(edge_index)).size
     node_mask = index_to_mask(nodes, num_nodes)
     while nodes.size < batch_size:
@@ -53,14 +55,21 @@ def batch_graph(
     edge_mask = node_mask[edge_index[0]] & node_mask[edge_index[1]]
     edge_idx = edge_index[:, edge_mask]
     
+    if relabel_nodes:
+        node_idx = jnp.zeros(node_mask.size, dtype=jnp.int32)
+        node_idx = node_idx.at[nodes].set( jnp.arange(nodes.shape[0]) )
+        edge_idx = node_idx[edge_idx]
+
     return nodes, edge_idx
 
 def remove_nodes(
     nodes: Union[jnp.ndarray, List[int]], 
-    edge_index: jnp.array
+    edge_index: jnp.array,
+    relabel_nodes: bool = True
     ):
 
-    nodes = jnp.array(nodes)
+    if not isinstance(nodes, jnp.ndarray): nodes = jnp.array(nodes)
+    
     num_nodes = jnp.unique(jnp.concatenate(edge_index)).size
     node_mask = ~index_to_mask(nodes, num_nodes)
         
@@ -68,6 +77,11 @@ def remove_nodes(
     edge_idx = edge_index[:,edge_mask]
     nodes = jnp.unique(jnp.concatenate(edge_idx))
     
+    if relabel_nodes:
+        node_idx = jnp.zeros(node_mask.size, dtype=jnp.int32)
+        node_idx = node_idx.at[nodes].set( jnp.arange(nodes.shape[0]) )
+        edge_idx = node_idx[edge_idx]
+
     return nodes, edge_idx
 
 def to_undirected( 

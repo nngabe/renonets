@@ -21,7 +21,7 @@ import optax
 from lib import utils
 from lib.graph_utils import batch_graph, remove_nodes, add_self_loops
 
-prng = lambda: jax.random.PRNGKey(onp.random.randint(1e+3))
+prng = lambda: jax.random.PRNGKey(0)
 
 class COSYNN(eqx.Module):
     encoder: eqx.Module
@@ -139,7 +139,7 @@ if __name__ == '__main__':
     idx_train, adj_train = remove_nodes(idx_test, adj)
 
     model = COSYNN(args)
-    
+    sys.exit() 
     print()
     print(f'MODULE: MODEL[DIMS](curv)')
     print(f' encoder: {args.encoder}{args.enc_dims}({args.c})')
@@ -173,6 +173,7 @@ if __name__ == '__main__':
         bundles = idx + taus
         yi = x[:,bundles].T
         xi = _batch(x, idx)
+        sys.exit(0)
         loss, grad = loss_bundle(model, xi, adj, ti, taus, yi)
         model, opt_state = make_step(grad, model, opt_state)
         if i % args.log_freq == 0:
@@ -190,7 +191,7 @@ if __name__ == '__main__':
             loss_data, loss_pde = terms[0].mean(), terms[1].mean()
             log['loss'][i] = [loss_data, loss_pde]
             print(f'{i:04d}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
-        if i%(3*args.log_freq) == 0 and i < args.epochs / 3: 
+        if i%(3*args.log_freq) == 0 and i < args.epochs / 3000: 
             model = eqx.tree_inference(model, value=False) 
     
     utils.save_model(model,log)

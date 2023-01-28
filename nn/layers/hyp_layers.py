@@ -82,7 +82,7 @@ class HypLinear(eqx.Module):
         self.dropout = eqx.nn.Dropout(p) #lambda x: dropout(self.p)(x, inference=False, key=prng_key)
         self.manifold = manifold
         self.c = c
-        self.bias = jnp.zeros((out_features,1)) 
+        self.bias = 1e-7*jnp.ones((out_features,1)) 
         self.weight = jnp.zeros((out_features, in_features))
         self.reset_parameters()
 

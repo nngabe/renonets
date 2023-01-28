@@ -9,12 +9,7 @@ config_args = {
         'epochs': (20000, 'maximum number of epochs to train for'),
         'weight-decay': (0., 'l2 regularization strength'),
         'optimizer': ('Adam', 'which optimizer to use, can be any of [Adam, RiemannianAdam]'),
-        'momentum': (0.999, 'momentum in optimizer'),
-        'patience': (100, 'patience for early stopping'),
-        'seed': (1234, 'seed for training'),
         'log-freq': (100, 'how often to compute print train/val metrics (in epochs)'),
-        'save': (0, '1 to save model and logs and 0 otherwise'),
-        'save-dir': (None, 'path to save training logs and model weights (defaults to logs/task/date/run/)'),
         'max-norm': (100., 'max norm for gradient clipping, or None for no gradient clipping'),
     },
     'model_config': {
