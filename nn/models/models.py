@@ -26,30 +26,27 @@ class Model(eqx.Module):
         self.c = args.c
         self.skip = args.skip
 
-    def __call__(self, x, t=None, adj=None):
+    def __call__(self, x, adj=None):
         if self.skip:
             return self._cat(x,adj)
         else:
             return self._plain(x,adj)
 
-
-    def _plain(self, x, adj):
-        if self.encode_graph:
-            for layer in self.layers:
+    def _plain(self, x, adj=None):
+        for layer in self.layers:
+            if self.encode_graph:
                 x,_ = layer(x,adj)
-        else:
-            for layer in self.layers:
+            else:
                 x = layer(x)
-        return x
+        return x 
 
-    def _cat(self, x, adj):
+    def _cat(self, x, adj=None):
         x_i = [x]
-        if self.encode_graph:
-            for layer in self.layers:
+        for layer in self.layers:
+            if self.encode_graph:
                 x,_ = layer(x,adj)
                 x_i.append(x)
-        else:
-            for layer in self.layers:
+            else:
                 x = layer(x)
                 x_i.append(x)
         return jnp.concatenate(x_i, axis=1)
@@ -108,21 +105,26 @@ class HNN(Model):
     """
     Hyperbolic Neural Networks.
     """
-
+    curvatures: list
     def __init__(self, args):
         super(HNN, self).__init__(args)
-        self.manifold = getattr(manifolds, args.manifold)()
-        dims, act, _ = hyp_layers.get_dim_act_curv(args)
+        dims, act, self.curvatures = hyp_layers.get_dim_act_curv(args) 
+        self.manifold = getattr(manifolds, args.manifold if args.dec_init else args.manifold_pinn)() 
         hnn_layers = []
         for i in range(len(dims) - 1):
             in_dim, out_dim = dims[i], dims[i + 1]
             hnn_layers.append( hyp_layers.HNNLayer(self.manifold, in_dim, out_dim, args.c, args.dropout, act, args.bias) )
+        if args.dec_init==0:
+            for i in range(1,1+args.post_hyp):
+                hnn_layers[-i] = hyp_layers.HNNLayer(manifolds.Euclidean(), dims[-(i+1)], dims[-i], args.c, args.dropout, act, args.bias)
         self.layers = nn.Sequential(hnn_layers)
         self.encode_graph = False
 
-    def __call__(self, x, t=None, adj=None):
-        x_hyp = self.manifold.proj(self.manifold.expmap0(self.manifold.proj_tan0(x, self.c), c=self.c), c=self.c)
-        return super(HNN, self).__call__(x_hyp)
+    def __call__(self, x): 
+        x_tan = self.manifold.proj_tan0(x, self.curvatures[0])
+        x_hyp = self.manifold.expmap0(x_tan, c=self.curvatures[0])
+        x = self.manifold.proj(x_hyp, c=self.curvatures[0])
+        return super(HNN, self).__call__(x)
 
 class HGCN(Model):
     """
@@ -145,12 +147,9 @@ class HGCN(Model):
         self.layers = nn.Sequential(hgc_layers)
         self.encode_graph = True
 
-    def __call__(self, x, adj, t=None):
+    def __call__(self, x, adj):
         x_tan = self.manifold.proj_tan0(x, self.curvatures[0])
         x_hyp = self.manifold.expmap0(x_tan, c=self.curvatures[0])
-        x_hyp = self.manifold.proj(x_hyp, c=self.curvatures[0])
-        return super(HGCN, self).__call__(x_hyp,t, adj)
-
-
-
+        x = self.manifold.proj(x_hyp, c=self.curvatures[0])
+        return super(HGCN, self).__call__(x, adj=adj)
 

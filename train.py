@@ -32,7 +32,7 @@ class COSYNN(eqx.Module):
     x_dim: int
     t_dim: int
     kappa: int
-    scalers: jnp.ndarray
+    scalers: onp.ndarray
     k_lin: Tuple[int,int]
     k_log: Tuple[int,int]
 
@@ -47,7 +47,7 @@ class COSYNN(eqx.Module):
         self.t_dim = args.time_dim
         self.kappa = args.kappa
         self.scalers = jnp.array([10.**i for i in range(1, 1 + args.time_dim)])
-        start = 1,1
+        start = 2,1
         self.k_lin = start[0], start[0] + self.t_dim//2
         self.k_log = start[1], start[1] + self.t_dim - (self.k_lin[1] - self.k_lin[0])
 
@@ -135,18 +135,21 @@ if __name__ == '__main__':
     tau = jnp.array([60])
 
     adj = add_self_loops(adj)
-    idx_test, adj_test = batch_graph(0, adj)
+    idx_test, adj_test = batch_graph(0, adj, batch_size=int(args.test_prop * n) )
     idx_train, adj_train = remove_nodes(idx_test, adj)
+    
+    print(f'\nx[test] =  {x[idx_test].shape}, adj[test] =  {adj_test.shape}')
+    print(f'x[train] = {x[idx_train].shape}, adj[train] = {adj_train.shape}')
+
+    x, adj = x[idx_test], adj_test
 
     model = COSYNN(args)
-    sys.exit() 
-    print()
-    print(f'MODULE: MODEL[DIMS](curv)')
+    
+    print(f'\nMODULE: MODEL[DIMS](curv)')
     print(f' encoder: {args.encoder}{args.enc_dims}({args.c})')
     print(f' decoder: {args.decoder}{args.dec_dims}({args.c})')
     print(f' pde: {args.pde}/{args.decoder}{args.pde_dims}({args.c})')
-    print(f' time_enc: linlog[{args.time_dim}]')
-    print()
+    print(f' time_enc: linlog[{args.time_dim}]\n')
 
     schedule = optax.warmup_exponential_decay_schedule(args.lr, peak_value=args.lr, warmup_steps=args.epochs//10,
                                                         transition_steps=args.epochs, decay_rate=1e-2, end_value=args.lr/1e+3)
@@ -161,7 +164,7 @@ if __name__ == '__main__':
         return xb
 
     def _taus(i, size=args.tau_num, tau_max=args.tau_max):
-        taus = jnp.array(10 * onp.random.exponential(2. + i/500., size), dtype=jnp.int32)
+        taus = jnp.array(10 * onp.random.exponential(2. + i/1000., size), dtype=jnp.int32)
         taus = jnp.clip(taus, 1, tau_max)
         return taus
       
@@ -173,13 +176,20 @@ if __name__ == '__main__':
         bundles = idx + taus
         yi = x[:,bundles].T
         xi = _batch(x, idx)
-        sys.exit(0)
         loss, grad = loss_bundle(model, xi, adj, ti, taus, yi)
+        
+        if args.grad_check:
+            grads = jax.tree_leaves(grad)
+            for g in grads:
+                if jnp.isnan(g).sum() > 0: 
+                    print(f'iter {i}: nan grad!')
+                    sys.exit(1)
+        
         model, opt_state = make_step(grad, model, opt_state)
-        if i % args.log_freq == 0:
+        if i % args.log_freq < 0:
             ti = jnp.linspace(args.kappa, T - args.tau_max , 100).reshape(-1,1)
             idx = ti.astype(int)
-            taus = jnp.arange(15,121,15)
+            taus = jnp.arange(15,120,15)
             bundles = idx + taus
             yi = x[:,bundles].T
             xi = _batch(x, idx)
@@ -191,7 +201,7 @@ if __name__ == '__main__':
             loss_data, loss_pde = terms[0].mean(), terms[1].mean()
             log['loss'][i] = [loss_data, loss_pde]
             print(f'{i:04d}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
-        if i%(3*args.log_freq) == 0 and i < args.epochs / 3000: 
+        if i%(3*args.log_freq) == 0 and i < 0:#args.epochs / 3: 
             model = eqx.tree_inference(model, value=False) 
     
     utils.save_model(model,log)

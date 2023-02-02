@@ -87,8 +87,8 @@ class PoincareBall(Manifold):
         return scale * p
 
     def mobius_add(self, x, y, c, dim=-1):
-        x2 = (x*x).sum(axis=dim, keepdims=True)
-        y2 = (y*y).sum(axis=dim, keepdims=True)
+        x2 = (x * x).sum(axis=dim, keepdims=True)
+        y2 = (y * y).sum(axis=dim, keepdims=True)
         xy = (x * y).sum(axis=dim, keepdims=True)
         num = (1 + 2 * c * xy + c * y2) * x + (1 - c * x2) * y
         denom = 1 + 2 * c * xy + c ** 2 * x2 * y2

@@ -7,10 +7,11 @@ config_args = {
         'lr': (0.005, 'learning rate'),
         'dropout': (0.02, 'dropout probability'),
         'epochs': (20000, 'maximum number of epochs to train for'),
-        'weight-decay': (0., 'l2 regularization strength'),
+        'weight_decay': (0., 'l2 regularization strength'),
         'optimizer': ('Adam', 'which optimizer to use, can be any of [Adam, RiemannianAdam]'),
-        'log-freq': (100, 'how often to compute print train/val metrics (in epochs)'),
-        'max-norm': (100., 'max norm for gradient clipping, or None for no gradient clipping'),
+        'log_freq': (100, 'how often to compute print train/val metrics (in epochs)'),
+        'max_norm': (1., 'max norm for gradient clipping, or None for no gradient clipping'),
+        'grad_check': (0, 'check for nan grads on each epoch'),
     },
     'model_config': {
         # init flags for neural nets
@@ -28,15 +29,16 @@ config_args = {
        
         # input/output sizes
         'kappa': (60, 'size of lookback window used as input to encoder'),
-        'tau_max': (500, 'maximum steps ahead forecast'),
+        'tau_max': (120, 'maximum steps ahead forecast'),
         'tau_num': (10, 'number of tau steps for each training bundle'),
+        
         # specify models. pde function layers are the same as the decoder layers by default.
         'encoder': ('HGCN', 'which encoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
         'decoder': ('HNN', 'which decoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
         'pde': ('neural_burgers', 'which PDE to use for the PINN loss'),
         
         # dims of neural nets. -1 will be inferred based on args.skip and args.time_enc. 
-        'enc_dims': ([-1,24,5], 'dimensions of encoder layers'),
+        'enc_dims': ([-1,96,5], 'dimensions of encoder layers'),
         'dec_dims': ([-1,256,256,1],'dimensions of decoder layers'),
         'pde_dims': ([-1,192,192,1], 'dimensions of each pde layers'),
         
@@ -46,21 +48,23 @@ config_args = {
         'act_pde': ('silu', 'which activation function to use (or None for no activation)'),
        
         # additional params for layer specification
+        'post_hyp': (1, 'number of post-hyperbolic layers in decoder and pde'),
         'bias': (1, 'whether to use bias in layers or not'),
         'skip': (1, 'whether to use skip connections or not. set to 0 after encoder init.'),
         'manifold': ('Euclidean', 'which manifold to use, can be any of [Euclidean, Hyperboloid, PoincareBall]'),
+        'manifold_pinn': ('Euclidean', 'manifold for PINN, i.e. decoder and pde'),
         'c': (1.0, 'hyperbolic radius, set to None for trainable curvature'),
         
         # graph encoder params
-        'n-heads': (4, 'number of attention heads for graph attention networks, must be a divisor dim'),
+        'n_heads': (4, 'number of attention heads for graph attention networks, must be a divisor dim'),
         'alpha': (0.2, 'alpha for leakyrelu in graph attention networks'),
-        'use-att': (0, 'whether to use hyperbolic attention or not'),
-        'local-agg': (0, 'whether to local tangent space aggregation or not')
+        'use_att': (0, 'whether to use hyperbolic attention or not'),
+        'local_agg': (0, 'whether to local tangent space aggregation or not')
     },
     'data_config': {
-        'data-path': ('../data_cosynn/gels_499_k2.csv', 'path for timeseries data'),
-        'adj-path': ('../data_cosynn/adj_499.csv', 'path for adjacency matrix'),
-        'test-prop': (0.1, 'proportion of test edges for link prediction'),
+        'data_path': ('../data_cosynn/gels_499_k2.csv', 'path for timeseries data'),
+        'adj_path': ('../data_cosynn/adj_499.csv', 'path for adjacency matrix'),
+        'test_prop': (0.6, 'proportion of test edges for link prediction'),
     #    'normalize-feats': (1, 'whether to normalize input node features'),
     #    'split-seed': (1234, 'seed for data splits (train/test/val)'),
     }

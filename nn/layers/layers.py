@@ -50,6 +50,8 @@ def get_dim_act(args):
 class Linear(eqx.Module): 
     p: float
     linear: eqx.nn.Linear
+    weight: jnp.ndarray
+    bias: jnp.ndarray
     act: Callable
     dropout: Callable
     
@@ -57,11 +59,14 @@ class Linear(eqx.Module):
         super(Linear, self).__init__()
         self.p = p # dropout prob
         self.linear = nn.Linear(in_features, out_features, use_bias, key=prng_key)
+        self.weight = jnp.zeros((out_features,in_features))
+        self.bias = 1e-7*jnp.ones((out_features,1))
         self.act = act
         self.dropout = lambda x: dropout(self.p)(x, inference=False, key=prng_key)
 
     def __call__(self, x):
-        hidden = self.linear(x)
+        hidden = x @ self.weight.T
+        hidden += self.bias
         hidden = dropout(self.p)(hidden, inference=False, key=prng_key)
         out = self.act(hidden)
         return out
