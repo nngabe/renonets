@@ -49,16 +49,16 @@ class Hyperboloid(Manifold):
         y = x[:,1:]
         y_sqnorm = jnp.linalg.norm(y, ord=2, axis=1, keepdims=True) ** 2 
         mask = jnp.ones_like(x)
-        mask.at[:, 0].set(0)
+        mask = mask.at[:, 0].set(0)
         vals = jnp.zeros_like(x)
-        vals.at[:, 0:1].set(jnp.sqrt(jnp.clip(K + y_sqnorm, a_min=self.eps)))
+        vals = vals.at[:, 0:1].set(jnp.sqrt(jnp.clip(K + y_sqnorm, a_min=self.eps)))
         return vals + mask * x
 
     def proj_tan(self, u, x, c):
         K = 1. / c
         ux = jnp.sum(x[:,1:] * u[:,1:], axis=1, keepdims=True)
         mask = jnp.ones_like(u)
-        mask.at[:, 0].set(0)
+        mask = mask.at[:, 0].set(0)
         vals = jnp.zeros_like(u)
         vals.at[:, 0:1].set(ux / jnp.clip(x[:, 0:1], a_min=self.eps))
         return vals + mask * u
@@ -67,7 +67,7 @@ class Hyperboloid(Manifold):
         if jnp.ndim(u)==1: u = u.reshape(1,-1)
         narrowed = u[:, :1]
         vals = jnp.zeros_like(u)
-        vals.at[:, :1].set(narrowed)
+        vals = vals.at[:, :1].set(narrowed)
         return u - vals
 
     def expmap(self, u, x, c):
@@ -100,8 +100,8 @@ class Hyperboloid(Manifold):
         x_norm = jnp.clip(x_norm, a_min=self.min_norm)
         theta = x_norm / sqrtK
         res = jnp.ones_like(u)
-        res.at[:, 0:1].set( sqrtK * cosh(theta) )
-        res.at[:, 1:].set( sqrtK * sinh(theta) * x / x_norm )
+        res = res.at[:, 0:1].set( sqrtK * cosh(theta) )
+        res = res.at[:, 1:].set( sqrtK * sinh(theta) * x / x_norm )
         return self.proj(res, c)
 
     def logmap0(self, x, c):
@@ -113,7 +113,7 @@ class Hyperboloid(Manifold):
         y_norm = jnp.clip(y_norm, a_min=self.min_norm)
         res = jnp.zeros_like(x)
         theta = jnp.clip(x[:, 0:1] / sqrtK, a_min=1.0 + self.eps)
-        res.at[:, 1:].set(sqrtK * arcosh(theta) * y / y_norm)
+        res = res.at[:, 1:].set(sqrtK * arcosh(theta) * y / y_norm)
         return res
 
     def mobius_add(self, x, y, c):
@@ -142,8 +142,8 @@ class Hyperboloid(Manifold):
         y_norm = jnp.clip(jnp.linalg.norm(y, ord=2, axis=1, keepdims=True), a_min=self.min_norm)
         y_normalized = y / y_norm
         v = jnp.ones_like(x)
-        v.at[:, 0:1].set( - y_norm )
-        v.at[:, 1:].set( (sqrtK - x0) * y_normalized )
+        v = v.at[:, 0:1].set( - y_norm )
+        v = v.at[:, 1:].set( (sqrtK - x0) * y_normalized )
         alpha = jnp.sum(y_normalized * u[:, 1:], axis=1, keepdims=True) / sqrtK
         res = u - alpha * v
         return self.proj_tan(res, x, c)

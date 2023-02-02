@@ -15,10 +15,12 @@ def tanh(x, clamp=15):
 
 
 def arcosh(x):
-    return jnp.arccosh(x)
+    clamp = 1.
+    return jnp.arccosh(x.clip(clamp))
 
 def arsinh(x):
     return jnp.arcsinh(x)
 
 def artanh(x):
-    return jnp.arctanh(x)
+    clamp = 1. - 1e-7
+    return jnp.arctanh(x.clip(clamp,clamp))
