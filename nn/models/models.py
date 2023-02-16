@@ -14,6 +14,12 @@ from equinox.module import Module, static_field
 
 prng_key = jax.random.PRNGKey(0)
 
+class null(eqx.Module):
+    def __init__(self, args):
+        super(null, self).__init__()
+    def __call__(self, x=None, adj=None):
+        return 0.
+
 class Model(eqx.Module):
     c: float
     skip: bool
@@ -42,6 +48,9 @@ class Model(eqx.Module):
 
     def _cat(self, x, adj=None):
         x_i = [x]
+        x = self.manifold.proj_tan0(x, c=self.c)
+        x = self.manifold.expmap0(x, c=self.c)
+        x = self.manifold.proj(x, c=self.c)
         for layer in self.layers:
             if self.encode_graph:
                 x,_ = layer(x,adj)
@@ -114,16 +123,10 @@ class HNN(Model):
         for i in range(len(dims) - 1):
             in_dim, out_dim = dims[i], dims[i + 1]
             hnn_layers.append( hyp_layers.HNNLayer(self.manifold, in_dim, out_dim, args.c, args.dropout, act, args.bias) )
-        if args.dec_init==0:
-            for i in range(1,1+args.post_hyp):
-                hnn_layers[-i] = hyp_layers.HNNLayer(manifolds.Euclidean(), dims[-(i+1)], dims[-i], args.c, args.dropout, act, args.bias)
         self.layers = nn.Sequential(hnn_layers)
         self.encode_graph = False
 
     def __call__(self, x): 
-        x_tan = self.manifold.proj_tan0(x, self.curvatures[0])
-        x_hyp = self.manifold.expmap0(x_tan, c=self.curvatures[0])
-        x = self.manifold.proj(x_hyp, c=self.curvatures[0])
         return super(HNN, self).__call__(x)
 
 class HGCN(Model):
@@ -148,8 +151,5 @@ class HGCN(Model):
         self.encode_graph = True
 
     def __call__(self, x, adj):
-        x_tan = self.manifold.proj_tan0(x, self.curvatures[0])
-        x_hyp = self.manifold.expmap0(x_tan, c=self.curvatures[0])
-        x = self.manifold.proj(x_hyp, c=self.curvatures[0])
         return super(HGCN, self).__call__(x, adj=adj)
 

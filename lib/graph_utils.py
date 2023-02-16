@@ -1,8 +1,11 @@
-from typing import Union, List
+from typing import Union, List, Tuple
 
 import jax
 import jax.numpy as jnp
+import numpy as onp
+import networkx as nx
 
+prng = lambda: jax.random.PRNGKey(0)
 
 def index_to_mask(index, size):
     
@@ -13,94 +16,125 @@ def index_to_mask(index, size):
     return mask
 
 def subgraph(
-    subset: Union[jnp.ndarray, List[int]],
-    edge_index: jnp.ndarray,
-    edge_attr: jnp.ndarray = None,
-    relabel_nodes: bool = True
+    index: Union[jnp.ndarray, List[int]],
+    x: jnp.ndarray,
+    adj: jnp.ndarray,
+    relabel_nodes: bool = True,
+    pad: bool = True,
+    pad_size: List[int] = [None,None]
     ):
+    """ get the subraph indexed by subset. """
+    if not isinstance(index, jnp.ndarray): index = jnp.array(index)
 
-    if not isinstance(subset, jnp.ndarray): subset = jnp.array(subset)
-
-    num_nodes = jnp.unique(jnp.concatenate(edge_index)).size
-    node_mask = index_to_mask(subset, size=num_nodes)
-    edge_mask = node_mask[edge_index[0]] & node_mask[edge_index[1]]
-    edge_index = edge_index[:, edge_mask]
-    edge_attr = edge_attr[edge_mask] if edge_attr is not None else None
+    num_nodes = jnp.unique(jnp.concatenate(adj)).size
+    node_mask = index_to_mask(index, size=num_nodes)
+    edge_mask = node_mask[adj[0]] & node_mask[adj[1]]
+    adj = adj[:, edge_mask]
 
     if relabel_nodes:
         node_idx = jnp.zeros(node_mask.size, dtype=jnp.int32)
-        node_idx = node_idx.at[subset].set( jnp.arange(subset.shape[0]) )
-        edge_index = node_idx[edge_index]
+        node_idx = node_idx.at[index].set( jnp.arange(index.shape[0]) )
+        adj = node_idx[adj]
 
-    return edge_index, edge_attr 
+    x, adj = pad_graph(x[index], adj, x_size=pad_size[0], adj_size=pad_size[1])
 
-def batch_graph(
-    nodes: Union[jnp.ndarray, List[int]], 
-    edge_index: jnp.array, 
+    return x, adj, index
+
+def sup_power_of_two(x: int) -> int:
+    y = 2
+    while y < x:
+        y *= 2
+    return y
+
+def pad_graph(x: jnp.ndarray, 
+              adj: jnp.ndarray, 
+              x_size: int = None, 
+              adj_size: int = None) -> Tuple[jnp.ndarray, ...]:
+    x_size = sup_power_of_two(x.shape[0]) if not x_size else x_size
+    adj_size = sup_power_of_two(adj.shape[1]) if not adj_size else adj_size
+    x_pad = 1e+1*jnp.ones((x_size-x.shape[0], x.shape[1]))
+    adj_pad = -1*jnp.ones((adj.shape[0], adj_size-adj.shape[1]), dtype=jnp.int32)
+    return jnp.concatenate([x, x_pad], axis=0), jnp.concatenate([adj, adj_pad],axis=1)
+
+def mask_pad(n: int, n_pad: int, flip: bool = False):
+    mask = jnp.arange(0, n_pad, 1)<(n - 1)
+    return mask.astype(jnp.int32)^flip
+
+def random_subgraph( 
+    x: jnp.array,
+    adj: jnp.array,
     batch_size: int = 100,
-    relabel_nodes: bool = True
+    seed: int = None, 
+    relabel_nodes: bool = True,
+    pad: bool = True,
+    pad_size: List[int] = [None,None]
     ):
+    """ obtain batch graph by hopping from initial nodes until desired batch_size is obtained.""" 
+    num_nodes = jnp.unique(jnp.concatenate(adj)).size
+    _prng = jax.random.PRNGKey(seed) if seed else jax.random.PRNGKey(0)
+    index = jax.random.randint(_prng, (3,), 0, num_nodes) 
+    node_mask = index_to_mask(index, num_nodes)
+    assert num_nodes > batch_size
 
-    if not isinstance(nodes, jnp.ndarray): nodes = jnp.array(nodes)
-    
-    num_nodes = jnp.unique(jnp.concatenate(edge_index)).size
-    node_mask = index_to_mask(nodes, num_nodes)
-    while nodes.size < batch_size:
-        edge_mask = node_mask[edge_index[0]]
-        edge_idx = edge_index[:,edge_mask]
-        nodes = jnp.unique(jnp.concatenate(edge_idx))
-        node_mask = node_mask.at[nodes].set(True)
-    nodes = nodes[:batch_size]
-    node_mask = index_to_mask(nodes, num_nodes)
-    edge_mask = node_mask[edge_index[0]] & node_mask[edge_index[1]]
-    edge_idx = edge_index[:, edge_mask]
+    while index.size < batch_size:
+        edge_mask = node_mask[adj[0]]
+        _adj = jax.random.permutation(_prng, adj[:,edge_mask], axis=1)
+        index = jnp.unique(jnp.concatenate(_adj))
+        node_mask = node_mask.at[index].set(True)
+    index = index[:batch_size]
+    node_mask = index_to_mask(index, num_nodes)
+    edge_mask = node_mask[adj[0]] & node_mask[adj[1]]
+    adj = adj[:, edge_mask]
     
     if relabel_nodes:
         node_idx = jnp.zeros(node_mask.size, dtype=jnp.int32)
-        node_idx = node_idx.at[nodes].set( jnp.arange(nodes.shape[0]) )
-        edge_idx = node_idx[edge_idx]
+        node_idx = node_idx.at[index].set( jnp.arange(index.shape[0]) )
+        adj = node_idx[adj]
+    
+    x, adj = pad_graph(x[index], adj, x_size=pad_size[0], adj_size=pad_size[1])
+ 
+    return x, adj, index
 
-    return nodes, edge_idx
-
-def remove_nodes(
-    nodes: Union[jnp.ndarray, List[int]], 
-    edge_index: jnp.array,
-    relabel_nodes: bool = True
+def louvain_subgraph(
+    x: jnp.array,
+    adj: jnp.array, 
+    batch_size: int = 100,
+    relabel_nodes: bool = True,
+    pad: bool = True,
+    pad_size: List[int] = [None,None]
     ):
-
-    if not isinstance(nodes, jnp.ndarray): nodes = jnp.array(nodes)
+    """ obtain batch graph by hopping from initial nodes until desired batch_size is obtained."""
     
-    num_nodes = jnp.unique(jnp.concatenate(edge_index)).size
-    node_mask = ~index_to_mask(nodes, num_nodes)
-        
-    edge_mask = node_mask[edge_index[0]] & node_mask[edge_index[1]]
-    edge_idx = edge_index[:,edge_mask]
-    nodes = jnp.unique(jnp.concatenate(edge_idx))
+    num_nodes = jnp.unique(jnp.concatenate(adj)).size
+    graph = nx.Graph()
+    graph.add_edges_from(onp.array(adj.T))
+    comms = nx.community.louvain_communities(graph, resolution=1.)
+    s = onp.array([len(c) for c in comms])
+    i_min = onp.argmin(onp.abs(s-batch_size))
+    index = jnp.array(list(comms[i_min]))
+    x, adj, _ = subgraph(index, x, adj)
     
-    if relabel_nodes:
-        node_idx = jnp.zeros(node_mask.size, dtype=jnp.int32)
-        node_idx = node_idx.at[nodes].set( jnp.arange(nodes.shape[0]) )
-        edge_idx = node_idx[edge_idx]
-
-    return nodes, edge_idx
+    x, adj = pad_graph(x, adj, x_size=pad_size[0], adj_size=pad_size[1])
+ 
+    return x, adj, index
 
 def to_undirected( 
-    edge_index: jnp.ndarray
+    adj: jnp.ndarray
     ):
 
-    tmp = jnp.concatenate([edge_index, edge_index[::-1]],axis=1)
+    tmp = jnp.concatenate([adj, adj[::-1]],axis=1)
     _, idx = jnp.unique(tmp.T, return_index=True, axis=0)
     tmp = tmp[:,idx]
 
     return tmp
 
 def add_self_loops(
-    edge_index: jnp.ndarray
+    adj: jnp.ndarray
     ):
 
-    idx = jnp.unique(jnp.concatenate(edge_index))
+    idx = jnp.unique(jnp.concatenate(adj))
     self_loops = jnp.array([idx,idx])
-    tmp = jnp.concatenate([edge_index,self_loops], axis=1)
+    tmp = jnp.concatenate([adj,self_loops], axis=1)
     _, reidx = jnp.unique(tmp.T, return_index=True, axis=0)
     tmp = tmp[:,reidx]
 

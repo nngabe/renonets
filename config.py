@@ -1,16 +1,17 @@
 import argparse
+import glob
 
 from nn.utils.train_utils import add_flags_from_config
 
 config_args = {
     'training_config': {
-        'lr': (0.005, 'learning rate'),
-        'dropout': (0.02, 'dropout probability'),
-        'epochs': (20000, 'maximum number of epochs to train for'),
-        'weight_decay': (0., 'l2 regularization strength'),
+        'lr': (2e-4, 'learning rate'),
+        'dropout': (0.0, 'dropout probability'),
+        'epochs': (501, 'maximum number of epochs to train for'),
+        'weight_decay': (4e-4, 'l2 regularization strength'),
         'optimizer': ('Adam', 'which optimizer to use, can be any of [Adam, RiemannianAdam]'),
         'log_freq': (100, 'how often to compute print train/val metrics (in epochs)'),
-        'max_norm': (1., 'max norm for gradient clipping, or None for no gradient clipping'),
+        'max_norm': (2., 'max norm for gradient clipping, or None for no gradient clipping'),
         'grad_check': (0, 'check for nan grads on each epoch'),
     },
     'model_config': {
@@ -21,12 +22,13 @@ config_args = {
         
         # loss weights
         'w_data': (1., 'weight for data loss'),
-        'w_pde': (10., 'weight for pde loss'),
+        'w_pde': (100., 'weight for pde loss'),
 
         # which layers use time encodings and what dim should encodings be
         'time_enc': ([0,1,1], 'whether to insert time encoding in encoder, decoder, and pde functions, respectively.'),
-        'time_dim': (2, 'dimension of time embedding'), 
-       
+        'time_dim': (12, 'dimension of time embedding'), 
+        'x_dim': (8, 'dimension of differentiable coordinates for PDE'),
+ 
         # input/output sizes
         'kappa': (60, 'size of lookback window used as input to encoder'),
         'tau_max': (120, 'maximum steps ahead forecast'),
@@ -36,9 +38,9 @@ config_args = {
         'encoder': ('HGCN', 'which encoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
         'decoder': ('HNN', 'which decoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
         'pde': ('neural_burgers', 'which PDE to use for the PINN loss'),
-        
+        'g': (None, 'inhomogenous operator'), 
         # dims of neural nets. -1 will be inferred based on args.skip and args.time_enc. 
-        'enc_dims': ([-1,96,5], 'dimensions of encoder layers'),
+        'enc_dims': ([-1,96,-1], 'dimensions of encoder layers'),
         'dec_dims': ([-1,256,256,1],'dimensions of decoder layers'),
         'pde_dims': ([-1,192,192,1], 'dimensions of each pde layers'),
         
@@ -48,10 +50,9 @@ config_args = {
         'act_pde': ('silu', 'which activation function to use (or None for no activation)'),
        
         # additional params for layer specification
-        'post_hyp': (1, 'number of post-hyperbolic layers in decoder and pde'),
         'bias': (1, 'whether to use bias in layers or not'),
         'skip': (1, 'whether to use skip connections or not. set to 0 after encoder init.'),
-        'manifold': ('Euclidean', 'which manifold to use, can be any of [Euclidean, Hyperboloid, PoincareBall]'),
+        'manifold': ('PoincareBall', 'which manifold to use, can be any of [Euclidean, Hyperboloid, PoincareBall]'),
         'manifold_pinn': ('Euclidean', 'manifold for PINN, i.e. decoder and pde'),
         'c': (1.0, 'hyperbolic radius, set to None for trainable curvature'),
         
@@ -62,9 +63,8 @@ config_args = {
         'local_agg': (0, 'whether to local tangent space aggregation or not')
     },
     'data_config': {
-        'data_path': ('../data_cosynn/gels_499_k2.csv', 'path for timeseries data'),
-        'adj_path': ('../data_cosynn/adj_499.csv', 'path for adjacency matrix'),
-        'test_prop': (0.6, 'proportion of test edges for link prediction'),
+        'path': ('499_k2', 'snippet from which to infer data path'),
+        'test_prop': (0.1, 'proportion of test nodes for forecasting'),
     #    'normalize-feats': (1, 'whether to normalize input node features'),
     #    'split-seed': (1234, 'seed for data splits (train/test/val)'),
     }
@@ -75,9 +75,10 @@ for _, config_dict in config_args.items():
     parser = add_flags_from_config(parser, config_dict)
 args = parser.parse_args()
 args.enc_dims[0] = args.kappa
+args.enc_dims[-1] = args.x_dim
 if args.skip: 
     args.dec_dims[0] = sum(args.enc_dims) + args.time_enc[1] * args.time_dim * 2
-    args.pde_dims[0] = args.dec_dims[0]
+    args.pde_dims[0] = args.dec_dims[0] + 1
 else: 
     args.dec_dims[0] = args.enc_dims[-1] + args.time_enc[1] * args.time_dim * 2
-    args.pde_dims[0] = args.dec_dims[0]
+    args.pde_dims[0] = args.dec_dims[0] + 1
