@@ -165,7 +165,7 @@ if __name__ == '__main__':
     
     print(f'\nx[train] = {x[idx_train].shape}, adj[train] = {adj_train.shape}')
     print(f'x[test]  = {x[idx_test].shape},  adj[test]  = {adj_test.shape}')
-
+    sys.exit()
     model = COSYNN(args)
      
     print(f'\nMODULE: MODEL[DIMS](curv)')
