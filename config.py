@@ -39,6 +39,7 @@ config_args = {
         'decoder': ('HNN', 'which decoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
         'pde': ('neural_burgers', 'which PDE to use for the PINN loss'),
         'g': (None, 'inhomogenous operator'), 
+        
         # dims of neural nets. -1 will be inferred based on args.skip and args.time_enc. 
         'enc_dims': ([-1,96,-1], 'dimensions of encoder layers'),
         'dec_dims': ([-1,256,256,1],'dimensions of decoder layers'),
@@ -64,9 +65,8 @@ config_args = {
     },
     'data_config': {
         'path': ('499_k2', 'snippet from which to infer data path'),
+        'log_path': (None, 'snippet from which to infer log/model path.'),
         'test_prop': (0.1, 'proportion of test nodes for forecasting'),
-    #    'normalize-feats': (1, 'whether to normalize input node features'),
-    #    'split-seed': (1234, 'seed for data splits (train/test/val)'),
     }
 }
 
