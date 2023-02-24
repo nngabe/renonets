@@ -23,10 +23,10 @@ config_args = {
         'pde_init': (2, 'flag indicating number of pde functions which remain to be init-ed.'),
         
         # loss weights
-        'w_data': (1., 'weight for data loss'),
-        'w_pde': (1., 'weight for pde loss'),
-        'c_data': (1., 'additive coefficient for data loss' ),
-        'c_pde': (1., 'additive coefficient for pde loss' ),
+        'w_data': (1., 'weight for data loss.'),
+        'w_pde': (1., 'weight for pde loss.'),
+        'w_int': (1., 'additive coefficient for data loss.' ),
+        'alpha_int': (1., 'power of loss interaction term.' ),
         'input_scaler': (1e-1, 'rescaling of input'),
         'rep_scaler': (10., 'rescaling of graph features'),
         'tau_scaler': (10., 'rescaling of tau encoding'),

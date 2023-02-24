@@ -16,8 +16,8 @@ class COSYNN(eqx.Module):
     c: jnp.float32
     w_data: jnp.float32
     w_pde: jnp.float32
-    c_data: jnp.float32
-    c_pde: jnp.float32
+    w_int: jnp.float32
+    alpha_int: jnp.float32
     x_dim: int
     t_dim: int
     kappa: int
@@ -34,8 +34,8 @@ class COSYNN(eqx.Module):
         self.c = args.c
         self.w_data = args.w_data
         self.w_pde = args.w_pde
-        self.c_data = args.c_data
-        self.c_pde = args.c_pde
+        self.w_int = args.w_int
+        self.alpha_int = args.alpha_int
         self.x_dim = args.x_dim
         self.t_dim = args.time_dim
         self.kappa = args.kappa
@@ -43,7 +43,7 @@ class COSYNN(eqx.Module):
                         't_log': 10. ** jnp.arange(-2, 2*self.t_dim, 1, dtype=jnp.float32),
                         'reps' : jnp.array([args.rep_scaler]),
                         'input': jnp.array([args.input_scaler]),
-                        'tau': jnp.array([10.])
+                        'tau': jnp.array([args.tau_scaler])
                        }
         self.k_lin = self.t_dim//2
         self.k_log = self.t_dim - self.k_lin
@@ -104,7 +104,9 @@ def compute_loss(model, x0, adj, t, tau, y):
     loss_pde = jax.lax.square(resid).sum(0).flatten()
     loss_data *= mask 
     loss_pde *= mask
-    return (model.c_data + model.w_data * loss_data.sum()) * ( model.c_pde + model.w_pde * loss_pde.sum() )
+    loss_data = loss_data.sum()
+    loss_pde = loss_pde.sum()
+    return model.w_data * loss_data +  model.w_pde * loss_pde + model.w_int * jax.lax.abs(loss_data * loss_pde)**model.alpha_int
 
 def loss_batch(model, xb, adj, tb, tau, yb):
     closs = lambda x,t,y: compute_loss(model, x, adj, t, tau, y)
