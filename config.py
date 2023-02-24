@@ -7,12 +7,14 @@ config_args = {
     'training_config': {
         'lr': (2e-4, 'learning rate'),
         'dropout': (0.0, 'dropout probability'),
-        'epochs': (501, 'maximum number of epochs to train for'),
-        'weight_decay': (4e-4, 'l2 regularization strength'),
+        'epochs': (9001, 'maximum number of epochs to train for'),
+        'weight_decay': (8e-4, 'l2 regularization strength'),
         'optimizer': ('Adam', 'which optimizer to use, can be any of [Adam, RiemannianAdam]'),
         'log_freq': (100, 'how often to compute print train/val metrics (in epochs)'),
         'max_norm': (2., 'max norm for gradient clipping, or None for no gradient clipping'),
         'grad_check': (0, 'check for nan grads on each epoch'),
+        'patience': (2, 'max evals without improvement for early stopping'),
+        'verbose': (False, 'print training data to console'),
     },
     'model_config': {
         # init flags for neural nets
@@ -22,7 +24,11 @@ config_args = {
         
         # loss weights
         'w_data': (1., 'weight for data loss'),
-        'w_pde': (100., 'weight for pde loss'),
+        'w_pde': (1., 'weight for pde loss'),
+        'c_data': (1., 'additive coefficient for data loss' ),
+        'c_pde': (1., 'additive coefficient for pde loss' ),
+        'input_scaler': (1e-1, 'rescaling of input'),
+        'rep_scaler': (10., 'rescaling of graph features'),
 
         # which layers use time encodings and what dim should encodings be
         'time_enc': ([0,1,1], 'whether to insert time encoding in encoder, decoder, and pde functions, respectively.'),
@@ -31,7 +37,7 @@ config_args = {
  
         # input/output sizes
         'kappa': (60, 'size of lookback window used as input to encoder'),
-        'tau_max': (120, 'maximum steps ahead forecast'),
+        'tau_max': (60, 'maximum steps ahead forecast'),
         'tau_num': (10, 'number of tau steps for each training bundle'),
         
         # specify models. pde function layers are the same as the decoder layers by default.
@@ -41,6 +47,13 @@ config_args = {
         'g': (None, 'inhomogenous operator'), 
         
         # dims of neural nets. -1 will be inferred based on args.skip and args.time_enc. 
+        'k_x_dim': (1, 'width of last encoder dim as multiple of x_dim'),
+        'enc_width': (96, 'dimensions of encoder layers'),
+        'dec_width': (256,'dimensions of decoder layers'),
+        'pde_width': (192, 'dimensions of each pde layers'),
+        'enc_depth': (2, 'dimensions of encoder layers'),
+        'dec_depth': (3,'dimensions of decoder layers'),
+        'pde_depth': (3, 'dimensions of each pde layers'),
         'enc_dims': ([-1,96,-1], 'dimensions of encoder layers'),
         'dec_dims': ([-1,256,256,1],'dimensions of decoder layers'),
         'pde_dims': ([-1,192,192,1], 'dimensions of each pde layers'),
@@ -75,7 +88,10 @@ for _, config_dict in config_args.items():
     parser = add_flags_from_config(parser, config_dict)
 args = parser.parse_args()
 args.enc_dims[0] = args.kappa
-args.enc_dims[-1] = args.x_dim
+args.enc_dims[-1] = args.x_dim * args.k_x_dim
+args.enc_dims[1:-1] = (args.enc_depth-1) * [args.enc_width]
+args.dec_dims[1:-1] = (args.dec_depth-1) * [args.dec_width]
+args.pde_dims[1:-1] = (args.pde_depth-1) * [args.pde_width]
 if args.skip: 
     args.dec_dims[0] = sum(args.enc_dims) + args.time_enc[1] * args.time_dim * 2
     args.pde_dims[0] = args.dec_dims[0] + 1

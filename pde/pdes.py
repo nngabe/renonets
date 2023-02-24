@@ -43,4 +43,5 @@ class neural_burgers(PDE):
         f_0 = grad_t.reshape(-1,1)
         f_1 = F * (  u * grad_x ).sum(1).reshape(-1,1)
         f_2 = g
-        return f_0 + f_1 + f_2
+        w_0 = 1e+1
+        return jnp.array([f_0 + f_1 + f_2, w_0 * jax.nn.leaky_relu(-f_0, 1e-2/w_0)])

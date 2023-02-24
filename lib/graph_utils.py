@@ -76,7 +76,9 @@ def random_subgraph(
     node_mask = index_to_mask(index, num_nodes)
     assert num_nodes > batch_size
 
-    while index.size < batch_size:
+    for i in range(100):
+        if index.size > batch_size:
+            break
         edge_mask = node_mask[adj[0]]
         _adj = jax.random.permutation(_prng, adj[:,edge_mask], axis=1)
         index = jnp.unique(jnp.concatenate(_adj))

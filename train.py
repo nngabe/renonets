@@ -14,6 +14,7 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 import optax
+import optuna
 
 from nn.models.cosynn import COSYNN, loss_bundle, compute_bundle_terms, make_step
 from config import parser
@@ -24,21 +25,36 @@ from lib.graph_utils import subgraph, random_subgraph, louvain_subgraph, add_sel
 
 prng = lambda i=0: jax.random.PRNGKey(i)
 
-if __name__ == '__main__':
+search = ['c_data', 'c_pde', 'lr', 'weight_decay']
+
+def _suggest(args, param, trial):
+    p = getattr(args,param)
+    if isinstance(p, int):
+        return trial.suggest_int(param, int(p * 1e-1), int(p * 1e+1), 2)
+    if isinstance(p, float):
+        return trial.suggest_float(param, p * 1e-1, p * 1e+1)
+
+def objective(trial):
     args = parser.parse_args()
     args.data_path = glob.glob(f'../data_cosynn/gels*{args.path}*')[0]
     args.adj_path = glob.glob(f'../data_cosynn/adj*{args.path.split("_")[:-1]}*')[0]
+
+    for param in search:
+        setattr(args, param, _suggest(args, param, trial))
+        print(f'{param} = {getattr(args,param)}, ', end='')
+    print()
 
     if args.log_path:
         model, args = utils.read_model(args)
     else:
         model = COSYNN(args)
-     
-    print(f'\nMODULE: MODEL[DIMS](curv)')
-    print(f' encoder: {args.encoder}{args.enc_dims}({args.c})')
-    print(f' decoder: {args.decoder}{args.dec_dims}({args.c})')
-    print(f' pde: {args.pde}/{args.decoder}{args.pde_dims}({args.c})')
-    print(f' time_enc: linlog[{args.time_dim}]\n')
+    
+    if args.verbose: 
+        print(f'\nMODULE: MODEL[DIMS](curv)')
+        print(f' encoder: {args.encoder}{args.enc_dims}({args.c})')
+        print(f' decoder: {args.decoder}{args.dec_dims}({args.c})')
+        print(f' pde: {args.pde}/{args.decoder}{args.pde_dims}({args.c})')
+        print(f' time_enc: linlog[{args.time_dim}]\n')
 
     A = pd.read_csv(args.adj_path, index_col=0).to_numpy()
     adj = jnp.array(jnp.where(A))
@@ -55,8 +71,9 @@ if __name__ == '__main__':
     log['train_index'] = idx_train
     log['test_index'] = idx_test
 
-    print(f'\nx[train] = {x[idx_train].shape}, adj[train] = {adj_train.shape}')
-    print(f'x[test]  = {x[idx_test].shape},  adj[test]  = {adj_test.shape}')
+    if args.verbose:
+        print(f'\nx[train] = {x[idx_train].shape}, adj[train] = {adj_train.shape}')
+        print(f'x[test]  = {x[idx_test].shape},  adj[test]  = {adj_test.shape}')
     
     schedule = optax.warmup_exponential_decay_schedule(args.lr/1e+1, peak_value=args.lr, warmup_steps=args.epochs//10,
                                                         transition_steps=args.epochs, decay_rate=1e-2, end_value=args.lr/1e+1)
@@ -74,7 +91,8 @@ if __name__ == '__main__':
         taus = jax.random.randint(prng(i), (size,), 1, tau_max) 
         taus = jnp.clip(taus, 1, tau_max)
         return taus
-    
+   
+    loss_best = 1e+30 
     stamp = str(int(time.time()))
     log['loss'] = {}
     x, adj, _   = random_subgraph(x_train, adj_train, batch_size=n//2, seed=0)
@@ -87,11 +105,8 @@ if __name__ == '__main__':
         xi = _batch(x, idx)
         loss, grad = loss_bundle(model, xi, adj, ti, taus, yi)
         grad = jax.tree_map(lambda x: 0. if jnp.isnan(x).any() else x, grad) 
-        if jnp.isnan(loss):
-            print('nan loss! breaking...')
-            sys.exit()
         
-        model, opt_state = make_step(grad, model, opt_state)
+        model, opt_state = make_step(grad, model, opt_state, optim)
         if i % args.log_freq == 0:
             x, adj = x_test, adj_test
             
@@ -104,10 +119,41 @@ if __name__ == '__main__':
             
             terms = compute_bundle_terms(model, xi, adj, ti, taus, yi)
             loss_data, loss_pde = terms[0].mean(), terms[1].mean()
-            log['loss'][i] = [loss_data, loss_pde]
-            print(f'{i:04d}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
+            log['loss'][i] = [loss_data.item(), loss_pde.item()]
+            if args.verbose:
+                print(f'{i:04d}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
+            trial.report(loss_data*loss_pde, i)
+            if trial.should_prune():
+                raise optuna.exceptions.TrialPruned()
             x, adj, _   = random_subgraph(x_train, adj_train, batch_size=n//2, seed=i)
         if i % args.log_freq * 10 == 0:
+            if loss_best > loss_data:
+                loss_best = loss_data
+                counter = 0
+            else:
+                counter += 1
             utils.save_model(model, log, stamp=stamp)
     
     utils.save_model(model, log, stamp=stamp)
+
+    loss = jnp.array(list(log['loss'].values()))
+    
+    return jnp.min(loss[:,0] * loss[:,1]**.25)
+
+if __name__ == '__main__':
+    
+    study = optuna.create_study(
+        pruner=optuna.pruners.MedianPruner(n_startup_trials=2, n_warmup_steps=2000),
+    )
+    study.optimize(objective, n_trials=10, timeout=1500)
+
+    print("Number of finished trials: {}".format(len(study.trials)))
+
+    print("Best trial:")
+    trial = study.best_trial
+
+    print("  Value: {}".format(trial.value))
+
+    print("  Params: ")
+    for key, value in trial.params.items():
+        print("    {}: {}".format(key, value))

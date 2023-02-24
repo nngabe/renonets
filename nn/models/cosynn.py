@@ -16,6 +16,8 @@ class COSYNN(eqx.Module):
     c: jnp.float32
     w_data: jnp.float32
     w_pde: jnp.float32
+    c_data: jnp.float32
+    c_pde: jnp.float32
     x_dim: int
     t_dim: int
     kappa: int
@@ -32,14 +34,16 @@ class COSYNN(eqx.Module):
         self.c = args.c
         self.w_data = args.w_data
         self.w_pde = args.w_pde
+        self.c_data = args.c_data
+        self.c_pde = args.c_pde
         self.x_dim = args.x_dim
         self.t_dim = args.time_dim
         self.kappa = args.kappa
         self.scalers = {'t_lin': 10. ** jnp.arange(2, 2*self.t_dim, 1, dtype=jnp.float32),
                         't_log': 10. ** jnp.arange(-2, 2*self.t_dim, 1, dtype=jnp.float32),
-                        'reps' : jnp.array([10.]),
-                        'input': jnp.array([1e-1]),
-                        #'tau': jnp.array([10.])
+                        'reps' : jnp.array([args.rep_scaler]),
+                        'input': jnp.array([args.input_scaler]),
+                        'tau': jnp.array([10.])
                        }
         self.k_lin = self.t_dim//2
         self.k_log = self.t_dim - self.k_lin
@@ -69,7 +73,7 @@ def _encode(x0, adj, t, model):
 def _decode(t_x, tau, z, model):
     t,x = t_x[:1], t_x[1:]
     t = model.time_encode(t)
-    tau = model.time_encode(tau * 1.)
+    tau = model.time_encode(tau * model.scalers['tau'])
     z0 = z[:model.kappa]
     zi = z[model.kappa:]
     zp = model.logmap0(zi) * model.scalers['reps'][0]
@@ -97,10 +101,10 @@ def compute_loss(model, x0, adj, t, tau, y):
     mask = ( jnp.abs(x0[:,0] - 10.) > 1e-18)
     loss_data = jax.lax.square(u - y)
     resid = model.pde.res(u, txz, grad_t, grad_x)
-    loss_pde = jax.lax.square(resid).flatten()
+    loss_pde = jax.lax.square(resid).sum(0).flatten()
     loss_data *= mask 
     loss_pde *= mask
-    return model.w_data * loss_data.sum() + model.w_pde * loss_pde.sum()
+    return (model.c_data + model.w_data * loss_data.sum()) * ( model.c_pde + model.w_pde * loss_pde.sum() )
 
 def loss_batch(model, xb, adj, tb, tau, yb):
     closs = lambda x,t,y: compute_loss(model, x, adj, t, tau, y)
@@ -119,7 +123,7 @@ def compute_loss_terms(model, x0, adj, t, tau, y):
     mask = ( jnp.abs(x0[:,0] - 10.) > 1e-18)
     loss_data = jax.lax.square(u - y)
     resid = model.pde.res(u, txz, grad_t, grad_x)
-    loss_pde = jax.lax.square(resid).flatten()
+    loss_pde = jax.lax.square(resid).sum(0).flatten()
     loss_data *= mask
     loss_pde *= mask
     return loss_data.sum(), loss_pde.sum()
@@ -135,7 +139,7 @@ def compute_bundle_terms(model, xb, adj, tb, taus, yb):
 
 # updating model parameters and optimizer state
 @eqx.filter_jit
-def make_step(grads, model, opt_state):
+def make_step(grads, model, opt_state, optim):
     updates, opt_state = optim.update(grads, opt_state, params=eqx.filter(model, eqx.is_inexact_array))
     model = eqx.apply_updates(model,updates)
     return model, opt_state
