@@ -6,9 +6,9 @@ from nn.utils.train_utils import add_flags_from_config
 config_args = {
     'training_config': {
         'lr': (2e-4, 'learning rate'),
-        'dropout': (0.0, 'dropout probability'),
-        'epochs': (9001, 'maximum number of epochs to train for'),
-        'weight_decay': (8e-4, 'l2 regularization strength'),
+        'dropout': (0.05, 'dropout probability'),
+        'epochs': (12001, 'maximum number of epochs to train for'),
+        'weight_decay': (1e-3, 'l2 regularization strength'),
         'optimizer': ('Adam', 'which optimizer to use, can be any of [Adam, RiemannianAdam]'),
         'log_freq': (100, 'how often to compute print train/val metrics (in epochs)'),
         'max_norm': (2., 'max norm for gradient clipping, or None for no gradient clipping'),
@@ -29,6 +29,7 @@ config_args = {
         'c_pde': (1., 'additive coefficient for pde loss' ),
         'input_scaler': (1e-1, 'rescaling of input'),
         'rep_scaler': (10., 'rescaling of graph features'),
+        'tau_scaler': (10., 'rescaling of tau encoding'),
 
         # which layers use time encodings and what dim should encodings be
         'time_enc': ([0,1,1], 'whether to insert time encoding in encoder, decoder, and pde functions, respectively.'),

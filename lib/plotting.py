@@ -18,7 +18,7 @@ plt.rcParams['font.serif'] = 'Computer Modern Roman'
 
 def get_log_data(max_loss = 3.0e+4, n_files = 0): 
 
-    keys =  ['x_dim', 'manifold', 'weight_decay', 'path', 'g', 'epochs', 'w_pde', 'rep_scalar']
+    keys =  ['x_dim', 'manifold', 'weight_decay', 'path', 'g', 'epochs', 'w_pde']
     files = glob.glob('../eqx_models/*.pkl'); files.sort()
     dargs = {}
     for file in files[-n_files:]:
@@ -74,7 +74,7 @@ def plot_u(k=0, tau=60, **kwargs):
     adj = jnp.array(jnp.where(A))
     x = jnp.array(pd.read_csv(args.data_path, index_col=0).dropna().to_numpy().T)
     inference_plot(model, x, adj, tau, **kwargs)
-    return model, args, adj, x, df
+    return model, args, data, df, x, adj
 
 def mask_plot(y):
     yy = pd.DataFrame(onp.array(y))
