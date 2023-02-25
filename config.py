@@ -6,14 +6,12 @@ from nn.utils.train_utils import add_flags_from_config
 config_args = {
     'training_config': {
         'lr': (2e-4, 'learning rate'),
-        'dropout': (0.05, 'dropout probability'),
-        'epochs': (12001, 'maximum number of epochs to train for'),
+        'dropout': (0.002, 'dropout probability'),
+        'epochs': (10001, 'maximum number of epochs to train for'),
         'weight_decay': (1e-3, 'l2 regularization strength'),
         'optimizer': ('Adam', 'which optimizer to use, can be any of [Adam, RiemannianAdam]'),
         'log_freq': (100, 'how often to compute print train/val metrics (in epochs)'),
-        'max_norm': (2., 'max norm for gradient clipping, or None for no gradient clipping'),
-        'grad_check': (0, 'check for nan grads on each epoch'),
-        'patience': (2, 'max evals without improvement for early stopping'),
+        'max_norm': (1., 'max norm for gradient clipping, or None for no gradient clipping'),
         'verbose': (False, 'print training data to console'),
     },
     'model_config': {
@@ -24,12 +22,12 @@ config_args = {
         
         # loss weights
         'w_data': (1., 'weight for data loss.'),
-        'w_pde': (1., 'weight for pde loss.'),
-        'w_int': (1., 'additive coefficient for data loss.' ),
-        'alpha_int': (1., 'power of loss interaction term.' ),
-        'input_scaler': (1e-1, 'rescaling of input'),
-        'rep_scaler': (10., 'rescaling of graph features'),
-        'tau_scaler': (10., 'rescaling of tau encoding'),
+        'w_pde': (10., 'weight for pde loss.'),
+        'w_int': (.1, 'additive coefficient for data loss.' ),
+        'alpha_int': (.2, 'power of loss interaction term.' ),
+        'input_scaler': (5e-1, 'rescaling of input'),
+        'rep_scaler': (5., 'rescaling of graph features'),
+        'tau_scaler': (5., 'rescaling of tau encoding'),
 
         # which layers use time encodings and what dim should encodings be
         'time_enc': ([0,1,1], 'whether to insert time encoding in encoder, decoder, and pde functions, respectively.'),

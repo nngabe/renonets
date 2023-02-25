@@ -25,24 +25,25 @@ from lib.graph_utils import subgraph, random_subgraph, louvain_subgraph, add_sel
 
 prng = lambda i=0: jax.random.PRNGKey(i)
 
-search = ['c_data', 'c_pde', 'lr', 'weight_decay']
+search = ['w_pde', 'w_int', 'alpha_int', 'lr', 'weight_decay', 'dropout', 'max_norm',  'input_scaler', 'rep_scaler', 'tau_scaler', 'x_dim']
 
 def _suggest(args, param, trial):
     p = getattr(args,param)
     if isinstance(p, int):
-        return trial.suggest_int(param, int(p * 1e-1), int(p * 1e+1), 2)
+        return trial.suggest_int(param, max(1, int(p * 5e-1)), int(p * 2e+0), 2)
     if isinstance(p, float):
         return trial.suggest_float(param, p * 1e-1, p * 1e+1)
 
-def objective(trial):
+def objective(trial=None):
     args = parser.parse_args()
     args.data_path = glob.glob(f'../data_cosynn/gels*{args.path}*')[0]
     args.adj_path = glob.glob(f'../data_cosynn/adj*{args.path.split("_")[:-1]}*')[0]
 
-    for param in search:
-        setattr(args, param, _suggest(args, param, trial))
-        print(f'{param} = {getattr(args,param)}, ', end='')
-    print()
+    if trial:
+        for param in search:
+            setattr(args, param, _suggest(args, param, trial))
+            print(f'{param} = {getattr(args,param)}, ', end='')
+        print()
 
     if args.log_path:
         model, args = utils.read_model(args)
@@ -92,7 +93,6 @@ def objective(trial):
         taus = jnp.clip(taus, 1, tau_max)
         return taus
    
-    loss_best = 1e+30 
     stamp = str(int(time.time()))
     log['loss'] = {}
     x, adj, _   = random_subgraph(x_train, adj_train, batch_size=n//2, seed=0)
@@ -109,7 +109,8 @@ def objective(trial):
         model, opt_state = make_step(grad, model, opt_state, optim)
         if i % args.log_freq == 0:
             x, adj = x_test, adj_test
-            
+            model = eqx.tree_inference(model, value=True) 
+
             ti = jnp.linspace(args.kappa, T - args.tau_max , 100).reshape(-1,1)
             idx = ti.astype(int)
             taus = jnp.arange(1, args.tau_max, 10).astype(int)
@@ -122,30 +123,28 @@ def objective(trial):
             log['loss'][i] = [loss_data.item(), loss_pde.item()]
             if args.verbose:
                 print(f'{i:04d}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
-            trial.report(loss_data*loss_pde, i)
-            if trial.should_prune():
-                raise optuna.exceptions.TrialPruned()
+            #if trial.should_prune():
+            #    raise optuna.exceptions.TrialPruned()
             x, adj, _   = random_subgraph(x_train, adj_train, batch_size=n//2, seed=i)
+            model = eqx.tree_inference(model, value=False)
         if i % args.log_freq * 10 == 0:
-            if loss_best > loss_data:
-                loss_best = loss_data
-                counter = 0
-            else:
-                counter += 1
             utils.save_model(model, log, stamp=stamp)
     
     utils.save_model(model, log, stamp=stamp)
-
     loss = jnp.array(list(log['loss'].values()))
-    
-    return jnp.min(loss[:,0] * loss[:,1]**.25)
+    idx_min = jnp.argmin(loss[:,0] * loss[:,1]**.25)
+
+    if trial:
+        return loss[idx_min,0], loss[idx_min,1]
+    else:
+        return locals()
 
 if __name__ == '__main__':
     
-    study = optuna.create_study(
+    study = optuna.create_study(directions=['minimize','minimize'],
         pruner=optuna.pruners.MedianPruner(n_startup_trials=2, n_warmup_steps=2000),
     )
-    study.optimize(objective, n_trials=10, timeout=1500)
+    study.optimize(objective, n_trials=200, timeout=2100)
 
     print("Number of finished trials: {}".format(len(study.trials)))
 
@@ -157,3 +156,5 @@ if __name__ == '__main__':
     print("  Params: ")
     for key, value in trial.params.items():
         print("    {}: {}".format(key, value))
+
+    optuna.visualization.plot_pareto_front(study, target_names=["loss_data", "loss_pde"])
