@@ -34,10 +34,7 @@ def _suggest(args, param, trial):
     if isinstance(p, float):
         return trial.suggest_float(param, p * 1e-1, p * 1e+1)
 
-def objective(trial=None):
-    args = parser.parse_args()
-    args.data_path = glob.glob(f'../data_cosynn/gels*{args.path}*')[0]
-    args.adj_path = glob.glob(f'../data_cosynn/adj*{args.path.split("_")[:-1]}*')[0]
+def objective(args, trial=None):
 
     if trial:
         for param in search:
@@ -140,21 +137,24 @@ def objective(trial=None):
         return locals()
 
 if __name__ == '__main__':
-    
-    study = optuna.create_study(directions=['minimize','minimize'],
-        pruner=optuna.pruners.MedianPruner(n_startup_trials=2, n_warmup_steps=2000),
-    )
-    study.optimize(objective, n_trials=200, timeout=2100)
+    args = parser.parse_args()
+    args.data_path = glob.glob(f'../data_cosynn/gels*{args.path}*')[0]
+    args.adj_path = glob.glob(f'../data_cosynn/adj*{args.path.split("_")[:-1]}*')[0]
 
-    print("Number of finished trials: {}".format(len(study.trials)))
+    if not args.opt_study:
+        res = objective(args)
+    else:
+        _objective = lambda trial: objective(args,trial)
+ 
+        study = optuna.create_study(directions=['minimize','minimize'],
+            pruner=optuna.pruners.MedianPruner(n_startup_trials=2, n_warmup_steps=2000),
+        )
+        study.optimize(_objective, n_trials=200, timeout=2100)
 
-    print("Best trial:")
-    trial = study.best_trial
+        print("Number of finished trials: {}".format(len(study.trials)))
 
-    print("  Value: {}".format(trial.value))
+        pareto = optuna.visualization.plot_pareto_front(study, target_names=["loss_data", "loss_pde"])
 
-    print("  Params: ")
-    for key, value in trial.params.items():
-        print("    {}: {}".format(key, value))
-
-    optuna.visualization.plot_pareto_front(study, target_names=["loss_data", "loss_pde"])
+        fig_path = '../optuna_figs/'
+        if not os.path.exists(fig_path): os.mkdir(fig_path)
+        plt.savefig(fig_path + f'pareto_{str(int(time.time()))}.pdf')

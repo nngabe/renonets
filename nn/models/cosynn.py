@@ -90,6 +90,16 @@ def _forward(model, x0, t, tau, adj):
 def decoder_val_grad(t_x, tau, z, model):
     return _decode(t_x, tau, z, model)
 
+@eqx.filter_value_and_grad(has_aux = True)
+def decoder_val_grad_lap(t_x, tau, z, model):
+    aux, grad_tx = decoder_val_grad(t_x, tau, z, model)
+    return grad_tx, aux
+
+def compute_val_grad_lap(x0, adj, t, tau, model):
+    t_x, z = _encode(x0, adj, t, model)
+    dvgl = lambda t_x, z: decoder_val_grad_lap(t_x, tau, z, model)
+    return jax.vmap(dvgl)(t_x, z) 
+
 def compute_val_grad(x0, adj, t, tau, model):
     t_x, z = _encode(x0, adj, t, model) 
     dvg = lambda t_x, z: decoder_val_grad(t_x, tau, z, model)
