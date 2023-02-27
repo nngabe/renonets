@@ -24,8 +24,6 @@ config_args = {
         # loss weights
         'w_data': (1., 'weight for data loss.'),
         'w_pde': (1., 'weight for pde loss.'),
-        'w_int': (.0, 'additive coefficient for data loss.' ),
-        'alpha_int': (.2, 'power of loss interaction term.' ),
         'input_scaler': (5e-1, 'rescaling of input'),
         'rep_scaler': (5., 'rescaling of graph features'),
         'tau_scaler': (5., 'rescaling of tau encoding'),
@@ -83,18 +81,22 @@ config_args = {
     }
 }
 
+def set_dims(args):
+    args.enc_dims[0] = args.kappa
+    args.enc_dims[-1] = args.x_dim * args.k_x_dim
+    args.enc_dims[1:-1] = (args.enc_depth-1) * [args.enc_width]
+    args.dec_dims[1:-1] = (args.dec_depth-1) * [args.dec_width]
+    args.pde_dims[1:-1] = (args.pde_depth-1) * [args.pde_width]
+    if args.skip: 
+        args.dec_dims[0] = sum(args.enc_dims) + args.time_enc[1] * args.time_dim * 2
+        args.pde_dims[0] = args.dec_dims[0] + 1
+    else: 
+        args.dec_dims[0] = args.enc_dims[-1] + args.time_enc[1] * args.time_dim * 2
+        args.pde_dims[0] = args.dec_dims[0] + 1
+
 parser = argparse.ArgumentParser()
 for _, config_dict in config_args.items():
     parser = add_flags_from_config(parser, config_dict)
 args = parser.parse_args()
-args.enc_dims[0] = args.kappa
-args.enc_dims[-1] = args.x_dim * args.k_x_dim
-args.enc_dims[1:-1] = (args.enc_depth-1) * [args.enc_width]
-args.dec_dims[1:-1] = (args.dec_depth-1) * [args.dec_width]
-args.pde_dims[1:-1] = (args.pde_depth-1) * [args.pde_width]
-if args.skip: 
-    args.dec_dims[0] = sum(args.enc_dims) + args.time_enc[1] * args.time_dim * 2
-    args.pde_dims[0] = args.dec_dims[0] + 1
-else: 
-    args.dec_dims[0] = args.enc_dims[-1] + args.time_enc[1] * args.time_dim * 2
-    args.pde_dims[0] = args.dec_dims[0] + 1
+set_dims(args)
+

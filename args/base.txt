@@ -1,40 +1,40 @@
---x_dim 1 --epochs 8001 --manifold PoincareBall --g null 
---x_dim 1 --epochs 8001 --manifold PoincareBall --g None 
---x_dim 1 --epochs 8001 --manifold Euclidean --g null 
---x_dim 1 --epochs 8001 --manifold Euclidean --g None 
---x_dim 2 --epochs 8001 --manifold PoincareBall --g null 
---x_dim 2 --epochs 8001 --manifold PoincareBall --g None 
---x_dim 2 --epochs 8001 --manifold Euclidean --g null 
---x_dim 2 --epochs 8001 --manifold Euclidean --g None 
---x_dim 3 --epochs 8001 --manifold PoincareBall --g null 
---x_dim 3 --epochs 8001 --manifold PoincareBall --g None 
---x_dim 3 --epochs 8001 --manifold Euclidean --g null 
---x_dim 3 --epochs 8001 --manifold Euclidean --g None 
---x_dim 4 --epochs 8001 --manifold PoincareBall --g null 
---x_dim 4 --epochs 8001 --manifold PoincareBall --g None 
---x_dim 4 --epochs 8001 --manifold Euclidean --g null 
---x_dim 4 --epochs 8001 --manifold Euclidean --g None 
---x_dim 5 --epochs 8001 --manifold PoincareBall --g null 
---x_dim 5 --epochs 8001 --manifold PoincareBall --g None 
---x_dim 5 --epochs 8001 --manifold Euclidean --g null 
---x_dim 5 --epochs 8001 --manifold Euclidean --g None 
---x_dim 6 --epochs 8001 --manifold PoincareBall --g null 
---x_dim 6 --epochs 8001 --manifold PoincareBall --g None 
---x_dim 6 --epochs 8001 --manifold Euclidean --g null 
---x_dim 6 --epochs 8001 --manifold Euclidean --g None 
---x_dim 7 --epochs 8001 --manifold PoincareBall --g null 
---x_dim 7 --epochs 8001 --manifold PoincareBall --g None 
---x_dim 7 --epochs 8001 --manifold Euclidean --g null 
---x_dim 7 --epochs 8001 --manifold Euclidean --g None 
---x_dim 8 --epochs 8001 --manifold PoincareBall --g null 
---x_dim 8 --epochs 8001 --manifold PoincareBall --g None 
---x_dim 8 --epochs 8001 --manifold Euclidean --g null 
---x_dim 8 --epochs 8001 --manifold Euclidean --g None 
---x_dim 9 --epochs 8001 --manifold PoincareBall --g null 
---x_dim 9 --epochs 8001 --manifold PoincareBall --g None 
---x_dim 9 --epochs 8001 --manifold Euclidean --g null 
---x_dim 9 --epochs 8001 --manifold Euclidean --g None 
---x_dim 10 --epochs 8001 --manifold PoincareBall --g null 
---x_dim 10 --epochs 8001 --manifold PoincareBall --g None 
---x_dim 10 --epochs 8001 --manifold Euclidean --g null 
---x_dim 10 --epochs 8001 --manifold Euclidean --g None 
+--x_dim 1 --epochs 8001 --manifold PoincareBall --g null --opt_study 1 
+--x_dim 1 --epochs 8001 --manifold PoincareBall --g None --opt_study 1 
+--x_dim 1 --epochs 8001 --manifold Euclidean --g null --opt_study 1 
+--x_dim 1 --epochs 8001 --manifold Euclidean --g None --opt_study 1 
+--x_dim 2 --epochs 8001 --manifold PoincareBall --g null --opt_study 1 
+--x_dim 2 --epochs 8001 --manifold PoincareBall --g None --opt_study 1 
+--x_dim 2 --epochs 8001 --manifold Euclidean --g null --opt_study 1 
+--x_dim 2 --epochs 8001 --manifold Euclidean --g None --opt_study 1 
+--x_dim 3 --epochs 8001 --manifold PoincareBall --g null --opt_study 1 
+--x_dim 3 --epochs 8001 --manifold PoincareBall --g None --opt_study 1 
+--x_dim 3 --epochs 8001 --manifold Euclidean --g null --opt_study 1 
+--x_dim 3 --epochs 8001 --manifold Euclidean --g None --opt_study 1 
+--x_dim 4 --epochs 8001 --manifold PoincareBall --g null --opt_study 1 
+--x_dim 4 --epochs 8001 --manifold PoincareBall --g None --opt_study 1 
+--x_dim 4 --epochs 8001 --manifold Euclidean --g null --opt_study 1 
+--x_dim 4 --epochs 8001 --manifold Euclidean --g None --opt_study 1 
+--x_dim 5 --epochs 8001 --manifold PoincareBall --g null --opt_study 1 
+--x_dim 5 --epochs 8001 --manifold PoincareBall --g None --opt_study 1 
+--x_dim 5 --epochs 8001 --manifold Euclidean --g null --opt_study 1 
+--x_dim 5 --epochs 8001 --manifold Euclidean --g None --opt_study 1 
+--x_dim 6 --epochs 8001 --manifold PoincareBall --g null --opt_study 1 
+--x_dim 6 --epochs 8001 --manifold PoincareBall --g None --opt_study 1 
+--x_dim 6 --epochs 8001 --manifold Euclidean --g null --opt_study 1 
+--x_dim 6 --epochs 8001 --manifold Euclidean --g None --opt_study 1 
+--x_dim 7 --epochs 8001 --manifold PoincareBall --g null --opt_study 1 
+--x_dim 7 --epochs 8001 --manifold PoincareBall --g None --opt_study 1 
+--x_dim 7 --epochs 8001 --manifold Euclidean --g null --opt_study 1 
+--x_dim 7 --epochs 8001 --manifold Euclidean --g None --opt_study 1 
+--x_dim 8 --epochs 8001 --manifold PoincareBall --g null --opt_study 1 
+--x_dim 8 --epochs 8001 --manifold PoincareBall --g None --opt_study 1 
+--x_dim 8 --epochs 8001 --manifold Euclidean --g null --opt_study 1 
+--x_dim 8 --epochs 8001 --manifold Euclidean --g None --opt_study 1 
+--x_dim 9 --epochs 8001 --manifold PoincareBall --g null --opt_study 1 
+--x_dim 9 --epochs 8001 --manifold PoincareBall --g None --opt_study 1 
+--x_dim 9 --epochs 8001 --manifold Euclidean --g null --opt_study 1 
+--x_dim 9 --epochs 8001 --manifold Euclidean --g None --opt_study 1 
+--x_dim 10 --epochs 8001 --manifold PoincareBall --g null --opt_study 1 
+--x_dim 10 --epochs 8001 --manifold PoincareBall --g None --opt_study 1 
+--x_dim 10 --epochs 8001 --manifold Euclidean --g null --opt_study 1 
+--x_dim 10 --epochs 8001 --manifold Euclidean --g None --opt_study 1 

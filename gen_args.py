@@ -6,7 +6,7 @@ OPTS = []
 
 if batch == '':
     OUT_FILE = 'args/base.txt'
-    opts = {'x_dim': [1,2,3,4,5,6,7,8,9,10], 'epochs': [8001], 'manifold': ['PoincareBall', 'Euclidean'], 'g': ['null', None]}
+    opts = {'x_dim': [1,2,3,4,5,6,7,8,9,10], 'epochs': [8001], 'manifold': ['PoincareBall', 'Euclidean'], 'g': ['null', None], 'opt_study': [1]}
 elif batch == 'var':
     OUT_FILE = 'args/var.txt'
     opts = {'encoder': ['HGCN'], 'x_dim': [2, 4, 8, 16, 24] }

@@ -16,8 +16,6 @@ class COSYNN(eqx.Module):
     c: jnp.float32
     w_data: jnp.float32
     w_pde: jnp.float32
-    w_int: jnp.float32
-    alpha_int: jnp.float32
     x_dim: int
     t_dim: int
     kappa: int
@@ -34,8 +32,6 @@ class COSYNN(eqx.Module):
         self.c = args.c
         self.w_data = args.w_data
         self.w_pde = args.w_pde
-        self.w_int = args.w_int
-        self.alpha_int = args.alpha_int
         self.x_dim = args.x_dim
         self.t_dim = args.time_dim
         self.kappa = args.kappa
@@ -116,8 +112,8 @@ def compute_loss(model, x0, adj, t, tau, y):
     loss_pde *= mask
     loss_data = loss_data.sum()
     loss_pde = loss_pde.sum()
-    return model.w_data * loss_data +  model.w_pde * loss_pde + model.w_int * jax.lax.abs(loss_data * loss_pde)**model.alpha_int
-
+    return model.w_data * loss_data +  model.w_pde * loss_pde
+ 
 def loss_batch(model, xb, adj, tb, tau, yb):
     closs = lambda x,t,y: compute_loss(model, x, adj, t, tau, y)
     return jnp.mean(jax.vmap(closs)(xb,tb,yb))

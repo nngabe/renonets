@@ -17,7 +17,7 @@ import optax
 import optuna
 
 from nn.models.cosynn import COSYNN, loss_bundle, compute_bundle_terms, make_step
-from config import parser
+from config import parser, set_dims
 
 from lib import utils
 from lib.graph_utils import subgraph, random_subgraph, louvain_subgraph, add_self_loops, sup_power_of_two, pad_graph
@@ -25,12 +25,12 @@ from lib.graph_utils import subgraph, random_subgraph, louvain_subgraph, add_sel
 
 prng = lambda i=0: jax.random.PRNGKey(i)
 
-search = ['w_pde', 'w_int', 'alpha_int', 'lr', 'weight_decay', 'dropout', 'max_norm',  'input_scaler', 'rep_scaler', 'tau_scaler', 'x_dim']
+search = ['w_pde', 'c', 'lr', 'weight_decay', 'dropout', 'max_norm',  'input_scaler', 'rep_scaler', 'tau_scaler', 'x_dim', 'time_dim', 'enc_width', 'dec_width', 'pde_width']
 
 def _suggest(args, param, trial):
     p = getattr(args,param)
     if isinstance(p, int):
-        return trial.suggest_int(param, max(1, int(p * 5e-1)), int(p * 2e+0), 2)
+        return trial.suggest_int(param, max(1, int(p * 5e-1)), int(p * 2e+0), 1)
     if isinstance(p, float):
         return trial.suggest_float(param, p * 1e-1, p * 1e+1)
 
@@ -40,6 +40,7 @@ def objective(args, trial=None):
         for param in search:
             setattr(args, param, _suggest(args, param, trial))
             print(f'{param} = {getattr(args,param)}, ', end='')
+        set_dims(args)
         print()
 
     if args.log_path:
@@ -149,7 +150,7 @@ if __name__ == '__main__':
         study = optuna.create_study(directions=['minimize','minimize'],
             pruner=optuna.pruners.MedianPruner(n_startup_trials=2, n_warmup_steps=2000),
         )
-        study.optimize(_objective, n_trials=200, timeout=2100)
+        study.optimize(_objective, n_trials=25, timeout=2700)
 
         print("Number of finished trials: {}".format(len(study.trials)))
 
