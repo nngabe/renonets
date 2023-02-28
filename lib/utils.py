@@ -28,7 +28,10 @@ def read_model(args):
         args_path = glob.glob(f'../eqx_models/log*{args.log_path}*')[0]
         param_path = glob.glob(f'../eqx_models/cosynn*{args.log_path}*')[0]
         with open(args_path, 'rb') as f: data = pickle.load(f)
-        args = Namespace(**data['args'])
+        args_load = Namespace(**data['args'])
+        for k in args.__dict__.keys():
+            if k not in ['lr', 'epochs', 'weight_decay', 'max_norm', 'opt_study', 'w_data', 'w_pde', 'verbose']:
+                setattr(args,k) = getattr(args_load,k)
     else:
         print('need type(args) == dict or args.log_path == True !')
         raise
