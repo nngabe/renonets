@@ -133,7 +133,7 @@ class HGCN(Model):
     """
     Hyperbolic-GCN.
     """
-    curvatures: list
+    curvatures: jax.numpy.ndarray 
     def __init__(self, args):
         super(HGCN, self).__init__(args)
         self.manifold = getattr(manifolds, args.manifold)()
