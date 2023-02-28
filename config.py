@@ -5,9 +5,9 @@ from nn.utils.train_utils import add_flags_from_config
 
 config_args = {
     'training_config': {
-        'lr': (2e-4, 'learning rate'),
-        'dropout': (0.001, 'dropout probability'),
-        'epochs': (8001, 'maximum number of epochs to train for'),
+        'lr': (1e-4, 'learning rate'),
+        'dropout': (0.0, 'dropout probability'),
+        'epochs': (14001, 'maximum number of epochs to train for'),
         'weight_decay': (1e-3, 'l2 regularization strength'),
         'optimizer': ('Adam', 'which optimizer to use, can be any of [Adam, RiemannianAdam]'),
         'log_freq': (100, 'how often to compute print train/val metrics (in epochs)'),
@@ -24,9 +24,9 @@ config_args = {
         # loss weights
         'w_data': (1., 'weight for data loss.'),
         'w_pde': (1., 'weight for pde loss.'),
-        'input_scaler': (5e-1, 'rescaling of input'),
-        'rep_scaler': (5., 'rescaling of graph features'),
-        'tau_scaler': (5., 'rescaling of tau encoding'),
+        'input_scaler': (1., 'rescaling of input'),
+        'rep_scaler': (8., 'rescaling of graph features'),
+        'tau_scaler': (8., 'rescaling of tau encoding'),
 
         # which layers use time encodings and what dim should encodings be
         'time_enc': ([0,1,1], 'whether to insert time encoding in encoder, decoder, and pde functions, respectively.'),
@@ -42,7 +42,7 @@ config_args = {
         'encoder': ('HGCN', 'which encoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
         'decoder': ('HNN', 'which decoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
         'pde': ('neural_burgers', 'which PDE to use for the PINN loss'),
-        'g': (None, 'inhomogenous operator'), 
+        'g': ('null', 'inhomogenous operator'), 
         
         # dims of neural nets. -1 will be inferred based on args.skip and args.time_enc. 
         'k_x_dim': (1, 'width of last encoder dim as multiple of x_dim'),

@@ -25,7 +25,7 @@ from lib.graph_utils import subgraph, random_subgraph, louvain_subgraph, add_sel
 
 prng = lambda i=0: jax.random.PRNGKey(i)
 
-search = ['w_pde', 'c', 'lr', 'weight_decay', 'dropout', 'max_norm',  'input_scaler', 'rep_scaler', 'tau_scaler', 'x_dim', 'time_dim', 'enc_width', 'dec_width', 'pde_width']
+search = ['w_pde', 'c', 'lr', 'weight_decay',  'max_norm',  'input_scaler', 'rep_scaler', 'tau_scaler', 'x_dim', 'time_dim', 'enc_width', 'dec_width', 'pde_width']
 
 def _suggest(args, param, trial):
     p = getattr(args,param)

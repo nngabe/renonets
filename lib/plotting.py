@@ -18,7 +18,7 @@ plt.rcParams['font.serif'] = 'Computer Modern Roman'
 
 def get_log_data(max_loss = 3.0e+4, n_files = 0): 
 
-    keys =  ['x_dim', 'manifold', 'weight_decay', 'path', 'g', 'epochs', 'w_pde']
+    keys =  ['x_dim', 'manifold', 'weight_decay', 'path', 'g', 'epochs', 'w_pde', 'tau_scaler']
     files = glob.glob('../eqx_models/*.pkl'); files.sort()
     dargs = {}
     for file in files[-n_files:]:
@@ -62,19 +62,6 @@ def plot_xy(x='x_dim', y=['loss[data]','loss[pde]'], show_err=False, **kwargs):
     ax[1].legend(legend_pde)
     return ax, df
 
-
-def plot_u(k=0, tau=60, **kwargs):
-
-    df = get_log_data(**kwargs)
-    idx = df['loss[data]'].sort_values().index[k]
-    with open(idx, 'rb') as f: data = pickle.load(f)
-    data['args']['log_path'] = idx.split('_')[-1][:-4]
-    model, args = utils.read_model(data['args'])
-    A = pd.read_csv(args.adj_path, index_col=0).to_numpy()
-    adj = jnp.array(jnp.where(A))
-    x = jnp.array(pd.read_csv(args.data_path, index_col=0).dropna().to_numpy().T)
-    inference_plot(model, x, adj, tau, **kwargs)
-    return model, args, data, df, x, adj
 
 def mask_plot(y):
     yy = pd.DataFrame(onp.array(y))
@@ -124,10 +111,23 @@ def inference_plot(model, x, adj, tau, i=0, j=-1, n=4):
     m = lambda x,t: _forward(model,x,t,tau,adj)
     t_min = model.kappa
     t_max = T - tau
-    tp = jnp.arange(t_min, t_max, 1)
+    tp = jnp.arange(t_min, t_max, 10)
     idx = tp.astype(int)
     xp = _batch(model, x, idx)
     res = jax.vmap(m)(xp,tp)
     u = res[0].squeeze()
     y = x[:,idx+tau].T
     _plot(model, u, y, tau, i, j, n)
+
+def plot_u(k=0, tau=60, i=0, j=-1, n=4, **kwargs):
+    df = get_log_data(**kwargs)
+    idx = df['loss[data]'].sort_values().index[k]
+    with open(idx, 'rb') as f: data = pickle.load(f)
+    data['args']['log_path'] = idx.split('_')[-1][:-4]
+    model, args = utils.read_model(data['args'])
+    A = pd.read_csv(args.adj_path, index_col=0).to_numpy()
+    adj = jnp.array(jnp.where(A))
+    x = jnp.array(pd.read_csv(args.data_path, index_col=0).dropna().to_numpy().T)
+    inference_plot(model, x, adj, tau, i=i, j=j, n=n)
+    return model, args, data, df, x, adj
+
