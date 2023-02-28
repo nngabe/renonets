@@ -46,7 +46,7 @@ def get_dim_act_curv(args):
         # create list of trainable curvature parameters
         curvatures = [1. for _ in range(args.num_layers)]
     else:
-        curvatures = jnp.array([args.c for _ in range(args.num_layers)])
+        curvatures = [args.c for _ in range(args.num_layers)]
 
     return dims, act, curvatures
 
