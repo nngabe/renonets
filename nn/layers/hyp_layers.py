@@ -76,6 +76,7 @@ class HypLinear(eqx.Module):
     c: float
     bias: jax.numpy.ndarray
     weight: jax.numpy.ndarray
+    prng: jax.random.PRNGKey
 
     def __init__(self, manifold, in_features, out_features, c, p, use_bias):
         super(HypLinear, self).__init__()
@@ -84,15 +85,22 @@ class HypLinear(eqx.Module):
         self.c = c
         self.bias = 1e-7*jnp.ones((out_features,1)) 
         self.weight = jnp.zeros((out_features, in_features))
+        self.prng = jax.random.PRNGKey(0)
         self.reset_parameters()
 
     def reset_parameters(self):
         init_weights = jax.nn.initializers.glorot_uniform()
         self.weight = init_weights(prng_key,self.weight.shape)
 
+    def _prng(self):
+        self.prng = jax.random.split(self.prng)[0]
+        return self.prng
+
     def __call__(self, x):
-        drop_weight = self.dropout(self.weight, key=prng_key)  
-        mv = self.manifold.mobius_matvec(drop_weight, x, self.c)
+        #drop_weight = self.dropout(self.weight, key=prng_key)
+        #if self.manifold
+        x = self.dropout(x,key=self._prng())
+        mv = self.manifold.mobius_matvec(self.weight, x, self.c)
         res = self.manifold.proj(mv, self.c)
         #if self.use_bias:
         bias = self.manifold.proj_tan0(self.bias.reshape(1, -1), self.c)

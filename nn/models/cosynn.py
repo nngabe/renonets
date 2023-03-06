@@ -82,6 +82,31 @@ def _forward(model, x0, t, tau, adj):
     dec = lambda t_x, z: _decode(t_x, tau, z, model)
     return jax.vmap(dec)(t_x, z)
 
+def _forward_eps(model, x0, t, tau, adj, prng, eps):
+    x0 = x0 + jnp.abs(x0)**.7 * eps * (-1 + 2. * jax.random.beta(prng,4.,4.,x0.shape))
+    return _forward(model, x0, t, tau, adj)
+    
+def _batch_eps(model, x0, t, tau, adj, eps=.05, n=50):
+    feps = lambda prng: _forward_eps(model, x0, t, tau, adj, prng, eps)
+    prng = jax.random.split(jax.random.PRNGKey(0), n)
+    res = jax.vmap(feps)(prng)[0]
+    return res.mean(0).T, res.std(0).T
+
+def _batch_drop(model, x0, t, tau, adj, n=50):
+    fwd = lambda _: _forward(model, x0, t, tau, adj)
+    _ = jnp.empty((n,1))
+    res = jax.vmap(fwd)(_)[0]
+    return res.mean(0).T, res.std(0).T
+
+def forward(model, x0, t, tau, adj, eps=.1, n=50, err=True):
+    if err:
+        u = _forward(model, x0, t, tau, adj)[0]
+        err = _batch_drop(model, x0, t, tau, adj, n)[1]
+        return u, err
+    else:
+        u = _forward(model, x0, t, tau, adj)[0]
+        return u, None
+
 @eqx.filter_value_and_grad(has_aux = True)
 def decoder_val_grad(t_x, tau, z, model):
     return _decode(t_x, tau, z, model)
