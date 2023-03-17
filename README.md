@@ -1,1 +1,1 @@
-# COSYNN: COmplex SYstem Neural Network
+# COSYNN: Complex System Neural Networks
