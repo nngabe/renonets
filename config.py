@@ -12,7 +12,7 @@ config_args = {
         'optimizer': ('Adam', 'which optimizer to use, can be any of [Adam, RiemannianAdam]'),
         'log_freq': (100, 'how often to compute print train/val metrics (in epochs)'),
         'max_norm': (1., 'max norm for gradient clipping, or None for no gradient clipping'),
-        'verbose': (False, 'print training data to console'),
+        'verbose': (True, 'print training data to console'),
         'opt_study': (False, 'whether to run a hyperparameter optimization study or not')
     },
     'model_config': {
