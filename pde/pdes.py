@@ -8,7 +8,7 @@ import jax.numpy as jnp
 from jax.numpy import concatenate as cat
 import equinox as eqx
 import equinox.nn as nn
-from equinox.module import Module, static_field
+from equinox import Module, static_field
 
 
 prng_key = jax.random.PRNGKey(0)
