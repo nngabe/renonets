@@ -82,7 +82,7 @@ if __name__ == '__main__':
     log['loss'] = {}
     x, adj, _   = random_subgraph(x_train, adj_train, batch_size=n//10, seed=0)
     for i in range(args.epochs):
-        ti = jax.random.randint(prng(i), (50, 1), args.kappa, T - args.tau_max).astype(jnp.float32)
+        ti = jax.random.randint(prng(i), (10, 1), args.kappa, T - args.tau_max).astype(jnp.float32)
         idx = ti.astype(int)
         taus = _taus(i)
         bundles = idx + taus
