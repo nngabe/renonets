@@ -66,11 +66,11 @@ class COSYNN(eqx.Module):
         z = z_x[:,:-self.x_dim]
         x = eps * z_x[:,-self.x_dim:]
         t = t*jnp.ones((x.shape[0],1))
-        txz = jnp.concatenate([t, x, z], axis=1)
-        return txz
+        tx = jnp.concatenate([t, x], axis=1)
+        return tx, z
 
-    def align(self, txz, tau):
-        t,x,z = txz[:1], txz[1:self.x_dim+1], txz[self.x_dim+1:]
+    def align(self, tx, z, tau):
+        t,x = tx[:1], tx[1:]
         t = self.time_encode(t)
         tau = self.time_encode(tau * self.scalers['tau'])
         z0 = z[:self.kappa]
@@ -79,34 +79,34 @@ class COSYNN(eqx.Module):
         ttxz = jnp.concatenate([t,tau,x,z0,zp], axis=0)
         return ttxz
 
-    def align_pde(self, txz, tau, u):
-        ttxz = self.align(txz, tau)
+    def align_pde(self, tx, z, tau, u):
+        ttxz = self.align(tx, z, tau)
         uttxz = jnp.concatenate([u,ttxz],axis=0)
         return uttxz
     
-    def decode(self, txz, tau):
-        ttxz = self.align(txz,tau)
+    def decode(self, tx, z, tau):
+        ttxz = self.align(tx,z,tau)
         u = self.decoder(ttxz)
         return u, (u, ttxz)
 
-    def val_grad(self, x, tau):
-        f = lambda x: self.decode(x,tau)
-        grad, val = jax.jacfwd(f, has_aux=True)(x)
-        grad =  grad[0][:,:1+self.x_dim]
+    def val_grad(self, tx, z, tau):
+        f = lambda tx: self.decode(tx,z,tau)
+        grad, val = jax.jacfwd(f, has_aux=True)(tx)
+        grad =  grad[0]
         return grad, (grad, val)
 
-    def val_grad_lap(self, x, tau):
-        vg = lambda x: self.val_grad(x,tau)
-        grad2, (grad,(u,ttxz)) = jax.jacfwd(vg, has_aux=True)(x)
+    def val_grad_lap(self, tx, z, tau):
+        vg = lambda tx,z: self.val_grad(tx,z,tau)
+        grad2, (grad,(u,ttxz)) = jax.jacfwd(vg, has_aux=True)(tx,z)
         hess = jax.vmap(jnp.diag)(grad2)
         lap_x = hess[:,1:].sum(1)
         return (u.flatten(), ttxz), grad, lap_x
 
-    def pde_res(self, txz, tau, u, grad, lap_x):
+    def pde_res(self, tx, z, tau, u, grad, lap_x):
         grad_t = grad[:,:,0]
         grad_x = grad[:,:,1:]
-        tau = tau * jnp.ones_like(u[:,:1]) 
-        xop = jax.vmap(self.align_pde)(txz, tau, u) # argument for neural operators
+        tau = tau * jnp.ones_like(u[:,:1])  
+        xop = jax.vmap(self.align_pde)(tx, z, tau, u) # argument for neural operators
         F = jax.vmap(self.pde.F)(xop).reshape(-1,1)
         v = jax.vmap(self.pde.v)(xop).reshape(-1,1)
         
@@ -127,13 +127,13 @@ class COSYNN(eqx.Module):
         return jax.vmap(jnp.sum)(jnp.abs(grad_x))
 
     def loss_single(self, x0, adj, t, tau, y):
-        vgl = lambda txz: self.val_grad_lap(txz, tau)
-        txz = self.encode(x0, adj, t)
-        (u, ttxz), grad, lap_x = jax.vmap(vgl)(txz)
+        vgl = lambda tx,z: self.val_grad_lap(tx, z, tau)
+        tx,z = self.encode(x0, adj, t)
+        (u, ttxz), grad, lap_x = jax.vmap(vgl)(tx,z)
         mask = self.mask(x0)
         f = jnp.sqrt(jnp.square(u)).sum(1) - .01
         loss_data = jax.lax.square(f - y)
-        resid = self.pde_res(txz, tau, u, grad, lap_x) 
+        resid = self.pde_res(tx, z, tau, u, grad, lap_x) 
         loss_pde = jax.lax.square(resid).sum(1)
         loss_data *= mask
         loss_pde *= mask
