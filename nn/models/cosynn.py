@@ -138,7 +138,7 @@ class COSYNN(eqx.Module):
         loss_data *= mask
         loss_pde *= mask
         loss = self.w_data * loss_data + self.w_pde * loss_pde
-        return loss
+        return loss.sum()
 
     def loss_batch(self, xb, adj, tb, tau, yb):
         sloss = lambda x,t,y: self.loss_single(x, adj, t, tau, y)
