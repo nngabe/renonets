@@ -14,6 +14,7 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 import optax
+import optuna
 
 from nn.models.cosynn import COSYNN, loss_bundle, compute_bundle_terms, make_step
 from config import parser, set_dims
@@ -24,12 +25,24 @@ from lib.graph_utils import subgraph, random_subgraph, louvain_subgraph, add_sel
 
 prng = lambda i=0: jax.random.PRNGKey(i)
 
+search = ['w_pde', 'c', 'lr', 'weight_decay',  'max_norm',  'input_scaler', 'rep_scaler', 'tau_scaler', 'x_dim', 'time_dim', 'enc_width', 'dec_width', 'pde_width']
 
-if __name__ == '__main__':
-    args = parser.parse_args()
-    args.data_path = glob.glob(f'../data_cosynn/gels*{args.path}*')[0]
-    args.adj_path = glob.glob(f'../data_cosynn/adj*{args.path.split("_")[:-1]}*')[0]
-    
+def _suggest(args, param, trial):
+    p = getattr(args,param)
+    if isinstance(p, int):
+        return trial.suggest_int(param, max(1, int(p * 5e-1)), int(p * 2e+0), 1)
+    if isinstance(p, float):
+        return trial.suggest_float(param, p * 1e-1, p * 1e+1)
+
+def objective(args, trial=None):
+
+    if trial:
+        for param in search:
+            setattr(args, param, _suggest(args, param, trial))
+            print(f'{param} = {getattr(args,param)}, ', end='')
+        set_dims(args)
+        print()
+
     if args.log_path:
         model, args = utils.read_model(args)
     else:
@@ -38,8 +51,8 @@ if __name__ == '__main__':
     if args.verbose: 
         print(f'\nMODULE: MODEL[DIMS](curv)')
         print(f' encoder: {args.encoder}{args.enc_dims}({args.c})')
-        print(f' decoder: {args.decoder}{args.dec_dims}')
-        print(f' pde: {args.pde}/{args.decoder}{args.pde_dims}')
+        print(f' decoder: {args.decoder}{args.dec_dims}({args.c})')
+        print(f' pde: {args.pde}/{args.decoder}{args.pde_dims}({args.c})')
         print(f' time_enc: linlog[{args.time_dim}]\n')
 
     A = pd.read_csv(args.adj_path, index_col=0).to_numpy()
@@ -80,7 +93,7 @@ if __name__ == '__main__':
    
     stamp = str(int(time.time()))
     log['loss'] = {}
-    x, adj, _   = random_subgraph(x_train, adj_train, batch_size=n//10, seed=0)
+    x, adj, _   = random_subgraph(x_train, adj_train, batch_size=n//2, seed=0)
     for i in range(args.epochs):
         ti = jax.random.randint(prng(i), (50, 1), args.kappa, T - args.tau_max).astype(jnp.float32)
         idx = ti.astype(int)
@@ -88,7 +101,6 @@ if __name__ == '__main__':
         bundles = idx + taus
         yi = x[:,bundles].T
         xi = _batch(x, idx)
-        sys.exit(0)
         loss, grad = loss_bundle(model, xi, adj, ti, taus, yi)
         grad = jax.tree_map(lambda x: 0. if jnp.isnan(x).any() else x, grad) 
         
@@ -109,6 +121,8 @@ if __name__ == '__main__':
             log['loss'][i] = [loss_data.item(), loss_pde.item()]
             if args.verbose:
                 print(f'{i:04d}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
+            #if trial.should_prune():
+            #    raise optuna.exceptions.TrialPruned()
             x, adj, _   = random_subgraph(x_train, adj_train, batch_size=n//2, seed=i)
             model = eqx.tree_inference(model, value=False)
         if i % args.log_freq * 10 == 0:
@@ -118,3 +132,30 @@ if __name__ == '__main__':
     loss = jnp.array(list(log['loss'].values()))
     idx_min = jnp.argmin(loss[:,0] * loss[:,1]**.25)
 
+    if trial:
+        return loss[idx_min,0], loss[idx_min,1]
+    else:
+        return locals()
+
+if __name__ == '__main__':
+    args = parser.parse_args()
+    args.data_path = glob.glob(f'../data_cosynn/gels*{args.path}*')[0]
+    args.adj_path = glob.glob(f'../data_cosynn/adj*{args.path.split("_")[:-1]}*')[0]
+
+    if not args.opt_study:
+        res = objective(args)
+    else:
+        _objective = lambda trial: objective(args,trial)
+ 
+        study = optuna.create_study(directions=['minimize','minimize'],
+            pruner=optuna.pruners.MedianPruner(n_startup_trials=2, n_warmup_steps=2000),
+        )
+        study.optimize(_objective, n_trials=25, timeout=2700)
+
+        print("Number of finished trials: {}".format(len(study.trials)))
+
+        pareto = optuna.visualization.plot_pareto_front(study, target_names=["loss_data", "loss_pde"])
+
+        fig_path = '../optuna_figs/'
+        if not os.path.exists(fig_path): os.mkdir(fig_path)
+        plt.savefig(fig_path + f'pareto_{str(int(time.time()))}.pdf')

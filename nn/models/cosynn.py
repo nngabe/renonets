@@ -27,6 +27,8 @@ class COSYNN(eqx.Module):
         super(COSYNN, self).__init__()
         self.encoder = getattr(models, args.encoder)(args)
         self.decoder = getattr(models, args.decoder)(args)
+        #self.F = getattr(models, args.decoder)(args)
+        #self.g = getattr(models, args.decoder if not args.g else args.g)(args)
         self.pde = getattr(pdes, args.pde)(args)
         self.manifold = getattr(manifolds, args.manifold)()
         self.c = args.c
@@ -43,7 +45,7 @@ class COSYNN(eqx.Module):
                        }
         self.k_lin = self.t_dim//2
         self.k_log = self.t_dim - self.k_lin
-
+ 
     def time_encode(self, t):
         t_lin = t / jnp.clip(self.scalers['t_lin'], 1e-7)
         t_log = t / jnp.clip(self.scalers['t_log'], 1e-7)
@@ -54,52 +56,103 @@ class COSYNN(eqx.Module):
 
     def logmap0(self, u):
         return self.manifold.logmap0(u,self.c)
+   
+    def mask(self, x0):
+        return jnp.abs(x0[:,0]-10.) > 1e-7
 
+    def encode(self, x0, adj, t, eps=0.):
+        x0 *= self.scalers['input'][0]
+        z_x = self.encoder(x0, adj)
+        z = z_x[:,:-self.x_dim]
+        x = eps * z_x[:,-self.x_dim:]
+        t = t*jnp.ones((x.shape[0],1))
+        txz = jnp.concatenate([t, x, z], axis=1)
+        return txz
 
-# functions for computing losses and gradients
-def _encode(x0, adj, t, model):
-    x0 *= model.scalers['input'][0]
-    z_x = model.encoder(x0, adj)
-    z = z_x[:,:-model.x_dim]
-    x = 0. * z_x[:,-model.x_dim:]
-    t = t*jnp.ones((x.shape[0],1))
-    t_x = jnp.concatenate([t, x], axis=1)
-    return t_x, z
+    def align(self, txz, tau):
+        t,x,z = txz[:1], txz[1:self.x_dim+1], txz[self.x_dim+1:]
+        t = self.time_encode(t)
+        tau = self.time_encode(tau * self.scalers['tau'])
+        z0 = z[:self.kappa]
+        zi = z[self.kappa:]
+        zp = self.logmap0(zi) * self.scalers['reps'][0]
+        ttxz = jnp.concatenate([t,tau,x,z0,zp], axis=0)
+        return ttxz
 
-def _decode(t_x, tau, z, model):
-    t,x = t_x[:1], t_x[1:]
-    t = model.time_encode(t)
-    tau = model.time_encode(tau * model.scalers['tau'])
-    z0 = z[:model.kappa]
-    zi = z[model.kappa:]
-    zp = model.logmap0(zi) * model.scalers['reps'][0]
-    txz = jnp.concatenate([t,tau,x,z0,zp], axis=0)
-    pred = model.decoder(txz).reshape(())
-    return pred, (zi, txz)
+    def align_pde(self, txz, tau, u):
+        ttxz = self.align(txz, tau)
+        uttxz = jnp.concatenate([u,ttxz],axis=0)
+        return uttxz
+    
+    def decode(self, txz, tau):
+        ttxz = self.align(txz,tau)
+        u = self.decoder(ttxz)
+        return u, (u, ttxz)
+
+    def val_grad(self, x, tau):
+        f = lambda x: self.decode(x,tau)
+        grad, val = jax.jacfwd(f, has_aux=True)(x)
+        grad =  grad[0][:,:1+self.x_dim]
+        return grad, (grad, val)
+
+    def val_grad_lap(self, x, tau):
+        vg = lambda x: self.val_grad(x,tau)
+        grad2, (grad,(u,ttxz)) = jax.jacfwd(vg, has_aux=True)(x)
+        hess = jax.vmap(jnp.diag)(grad2)
+        lap_x = hess[:,1:].sum(1)
+        return (u.flatten(), ttxz), grad, lap_x
+
+    def pde_res(self, txz, tau, u, grad, lap_x):
+        grad_t = grad[:,:,0]
+        grad_x = grad[:,:,1:]
+        tau = tau * jnp.ones_like(u[:,:1]) 
+        xop = jax.vmap(self.align_pde)(txz, tau, u) # argument for neural operators
+        F = jax.vmap(self.pde.F)(xop).reshape(-1,1)
+        v = jax.vmap(self.pde.v)(xop).reshape(-1,1)
+        
+        f0 = grad_t
+        f1 = -F * jnp.einsum('mp,mqp->mq', u, grad_x)
+        f2 = v * lap_x
+        resid = f0 - f1 - f2
+        return resid
+
+    def div(self, grad_x):
+        return jax.vmap(jnp.diag).sum()
+
+    def vort(self, grad_x):
+        omega = lambda grad_x: jnp.abs(grad_x - grad_x.T).sum()/2.
+        return jax.vmap(omega)(grad_x)
+
+    def enstrophy(self, grad_x):
+        return jax.vmap(jnp.sum)(jnp.abs(grad_x))
+
+    def loss_single(self, x0, adj, t, tau, y):
+        vgl = lambda txz: self.val_grad_lap(txz, tau)
+        txz = self.encode(x0, adj, t)
+        (u, ttxz), grad, lap_x = jax.vmap(vgl)(txz)
+        mask = self.mask(x0)
+        f = jnp.sqrt(jnp.square(u)).sum(1) - .01
+        loss_data = jax.lax.square(f - y)
+        resid = self.pde_res(txz, tau, u, grad, lap_x) 
+        loss_pde = jax.lax.square(resid).sum(1)
+        loss_data *= mask
+        loss_pde *= mask
+        loss = self.w_data * loss_data + self.w_pde * loss_pde
+        return loss
+
+    def loss_batch(self, xb, adj, tb, tau, yb):
+        sloss = lambda x,t,y: self.loss_single(x, adj, t, tau, y)
+        return jnp.mean(jax.vmap(sloss)(xb, tb, yb))
+
+    def loss_bundle(self, xb, adj, tb, taus, yb):
+        lbatch = lambda tau, y: self.loss_batch(xb, adj, tb, tau, y)
+        return jnp.mean(jax.vmap(lbatch)(taus,yb))
+
 
 def _forward(model, x0, t, tau, adj):
     t_x, z = _encode(x0, adj, t, model)
     dec = lambda t_x, z: _decode(t_x, tau, z, model)
     return jax.vmap(dec)(t_x, z)
-
-@eqx.filter_value_and_grad(has_aux = True)
-def decoder_val_grad(t_x, tau, z, model):
-    return _decode(t_x, tau, z, model)
-
-@eqx.filter_value_and_grad(has_aux = True)
-def decoder_val_grad_lap(t_x, tau, z, model):
-    aux, grad_tx = decoder_val_grad(t_x, tau, z, model)
-    return grad_tx, aux
-
-def compute_val_grad_lap(x0, adj, t, tau, model):
-    t_x, z = _encode(x0, adj, t, model)
-    dvgl = lambda t_x, z: decoder_val_grad_lap(t_x, tau, z, model)
-    return jax.vmap(dvgl)(t_x, z) 
-
-def compute_val_grad(x0, adj, t, tau, model):
-    t_x, z = _encode(x0, adj, t, model) 
-    dvg = lambda t_x, z: decoder_val_grad(t_x, tau, z, model)
-    return jax.vmap(dvg)(t_x, z)
 
 def compute_loss(model, x0, adj, t, tau, y):
     (u, (zi, txz)), grad_tx = compute_val_grad(x0, adj, t, tau, model)

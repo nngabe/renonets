@@ -13,6 +13,7 @@ import equinox.nn as nn
 from equinox import Module, static_field
 
 prng_key = jax.random.PRNGKey(0)
+prng_fn = lambda i: jax.random.PRNGKey(i)
 
 class null(eqx.Module):
     def __init__(self, args):
@@ -60,20 +61,25 @@ class Model(eqx.Module):
                 x_i.append(x)
         return jnp.concatenate(x_i, axis=1)
 
-class MLP(Model):
-    """
-    Multi-layer perceptron.
-    """
+class MLP(eqx.Module):
+    layers: eqx.nn.Sequential
+    drop_fn: eqx.nn.Dropout
 
     def __init__(self, args):
-        super(MLP, self).__init__(args)
+        super(MLP, self).__init__()
         dims, act = get_dim_act(args)
+        self.drop_fn = eqx.nn.Dropout(args.dropout)
         layers = []
         for i in range(len(dims) - 1):
             in_dim, out_dim = dims[i], dims[i + 1]
-            layers.append(Linear(in_dim, out_dim, args.dropout, act, args.bias))
+            layers.append(Linear(in_dim, out_dim, args.dropout, act))
         self.layers = nn.Sequential(layers)
-        self.encode_graph = False
+
+    def __call__(self, x, key=prng_key):
+        for layer in self.layers:
+            x = layer(x)
+            #x = self.drop_fn(x, key=key)
+        return x
 
 class GCN(Model):
     """

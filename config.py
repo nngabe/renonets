@@ -42,7 +42,6 @@ config_args = {
         'encoder': ('HGCN', 'which encoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
         'decoder': ('HNN', 'which decoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
         'pde': ('neural_burgers', 'which PDE to use for the PINN loss'),
-        'g': ('null', 'inhomogenous operator'), 
         
         # dims of neural nets. -1 will be inferred based on args.skip and args.time_enc. 
         'k_x_dim': (1, 'width of last encoder dim as multiple of x_dim'),
@@ -84,19 +83,19 @@ config_args = {
 def set_dims(args):
     args.enc_dims[0] = args.kappa
     args.enc_dims[-1] = args.x_dim * args.k_x_dim
+    args.dec_dims[-1] = args.x_dim
     args.enc_dims[1:-1] = (args.enc_depth-1) * [args.enc_width]
     args.dec_dims[1:-1] = (args.dec_depth-1) * [args.dec_width]
     args.pde_dims[1:-1] = (args.pde_depth-1) * [args.pde_width]
     if args.skip: 
         args.dec_dims[0] = sum(args.enc_dims) + args.time_enc[1] * args.time_dim * 2
-        args.pde_dims[0] = args.dec_dims[0] + 1
     else: 
         args.dec_dims[0] = args.enc_dims[-1] + args.time_enc[1] * args.time_dim * 2
-        args.pde_dims[0] = args.dec_dims[0] + 1
+    
+    args.pde_dims[0] = args.dec_dims[0] + args.x_dim
 
 parser = argparse.ArgumentParser()
 for _, config_dict in config_args.items():
     parser = add_flags_from_config(parser, config_dict)
 args = parser.parse_args()
 set_dims(args)
-
