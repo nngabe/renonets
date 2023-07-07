@@ -119,14 +119,14 @@ class COSYNN(eqx.Module):
     def div(self, grad_x):
         return jax.vmap(jnp.diag).sum()
 
-    def vort(self, grad_x):
+    def curl(self, grad_x):
         omega = lambda grad_x: jnp.abs(grad_x - grad_x.T).sum()/2.
         return jax.vmap(omega)(grad_x)
 
     def enstrophy(self, grad_x):
         return jax.vmap(jnp.sum)(jnp.abs(grad_x))
 
-    def loss_single(self, x0, adj, t, tau, y):
+    def loss_single(self, x0, adj, t, tau, y, terms=False):
         vgl = lambda tx,z: self.val_grad_lap(tx, z, tau)
         tx,z = self.encode(x0, adj, t)
         (u, ttxz), grad, lap_x = jax.vmap(vgl)(tx,z)
@@ -137,66 +137,42 @@ class COSYNN(eqx.Module):
         loss_pde = jax.lax.square(resid).sum(1)
         loss_data *= mask
         loss_pde *= mask
-        loss = self.w_data * loss_data + self.w_pde * loss_pde
-        return loss.sum()
+        if terms: 
+            return loss_data.sum(), loss_pde.sum() 
+        else:
+            loss = self.w_data * loss_data + self.w_pde * loss_pde
+            return loss.sum()
 
-    def loss_batch(self, xb, adj, tb, tau, yb):
-        sloss = lambda x,t,y: self.loss_single(x, adj, t, tau, y)
-        return jnp.mean(jax.vmap(sloss)(xb, tb, yb))
+    def loss_batch(self, xb, adj, tb, tau, yb, terms=False):
+        sloss = lambda x,t,y: self.loss_single(x, adj, t, tau, y, terms=terms)
+        res = jax.vmap(sloss)(xb, tb, yb)
+        if terms: 
+            return res
+        else:
+            return jnp.mean(res)
 
-    def loss_bundle(self, xb, adj, tb, taus, yb):
-        lbatch = lambda tau, y: self.loss_batch(xb, adj, tb, tau, y)
-        return jnp.mean(jax.vmap(lbatch)(taus,yb))
-
+    def loss_bundle(self, xb, adj, tb, taus, yb, terms=False):
+        lbatch = lambda tau, y: self.loss_batch(xb, adj, tb, tau, y, terms=terms)
+        res = jax.vmap(lbatch)(taus,yb)
+        if terms:
+            return res
+        else:
+            return jnp.mean(res)
 
 def _forward(model, x0, t, tau, adj):
-    t_x, z = _encode(x0, adj, t, model)
-    dec = lambda t_x, z: _decode(t_x, tau, z, model)
-    return jax.vmap(dec)(t_x, z)
-
-def compute_loss(model, x0, adj, t, tau, y):
-    (u, (zi, txz)), grad_tx = compute_val_grad(x0, adj, t, tau, model)
-    grad_t, grad_x = grad_tx[:,:1], grad_tx[:,1:]
-    mask = ( jnp.abs(x0[:,0] - 10.) > 1e-18)
-    loss_data = jax.lax.square(u - y)
-    resid = model.pde.res(u, txz, grad_t, grad_x)
-    loss_pde = jax.lax.square(resid).sum(0).flatten()
-    loss_data *= mask 
-    loss_pde *= mask
-    loss_data = loss_data.sum()
-    loss_pde = loss_pde.sum()
-    return model.w_data * loss_data +  model.w_pde * loss_pde
- 
-def loss_batch(model, xb, adj, tb, tau, yb):
-    closs = lambda x,t,y: compute_loss(model, x, adj, t, tau, y)
-    return jnp.mean(jax.vmap(closs)(xb,tb,yb))
+    tx, z = model.encode(x0, adj, t)
+    dec = lambda tx, z: decode(tx, z, tau)
+    return jax.vmap(dec)(tx, z)
 
 @eqx.filter_jit
 @eqx.filter_value_and_grad
 def loss_bundle(model, xb, adj, tb, taus, yb):
-    lbatch = lambda tau,y: loss_batch(model, xb, adj, tb, tau, y)
-    return jnp.mean(jax.vmap(lbatch)(taus,yb))
-
-# utility functions for reporting or inference
-def compute_loss_terms(model, x0, adj, t, tau, y):
-    (u, (zi,txz)), grad_tx = compute_val_grad(x0, adj, t, tau, model)
-    grad_t, grad_x = grad_tx[:,0], grad_tx[:,1:]
-    mask = ( jnp.abs(x0[:,0] - 10.) > 1e-18)
-    loss_data = jax.lax.square(u - y)
-    resid = model.pde.res(u, txz, grad_t, grad_x)
-    loss_pde = jax.lax.square(resid).sum(0).flatten()
-    loss_data *= mask
-    loss_pde *= mask
-    return loss_data.sum(), loss_pde.sum()
-
-def compute_batch_terms(model, xb, adj, tb, tau, yb):
-    clt = lambda x,t,y: compute_loss_terms(model, x, adj, t, tau, y)
-    return jax.vmap(clt)(xb,tb,yb)
+    return model.loss_bundle(xb,adj,tb,taus,yb)
 
 @eqx.filter_jit
 def compute_bundle_terms(model, xb, adj, tb, taus, yb):
-    cbt = lambda tau,y: compute_batch_terms(model, xb, adj, tb, tau, y)
-    return jax.vmap(cbt)(taus,yb)
+    ldata, lpde = model.loss_bundle(xb,adj,tb,taus,yb,terms=True)
+    return ldata, lpde
 
 # updating model parameters and optimizer state
 @eqx.filter_jit

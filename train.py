@@ -88,7 +88,7 @@ if __name__ == '__main__':
         bundles = idx + taus
         yi = x[:,bundles].T
         xi = _batch(x, idx)
-        sys.exit(0)
+        #sys.exit(0)
         loss, grad = loss_bundle(model, xi, adj, ti, taus, yi)
         grad = jax.tree_map(lambda x: 0. if jnp.isnan(x).any() else x, grad) 
         
