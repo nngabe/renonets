@@ -27,8 +27,6 @@ class COSYNN(eqx.Module):
         super(COSYNN, self).__init__()
         self.encoder = getattr(models, args.encoder)(args)
         self.decoder = getattr(models, args.decoder)(args)
-        #self.F = getattr(models, args.decoder)(args)
-        #self.g = getattr(models, args.decoder if not args.g else args.g)(args)
         self.pde = getattr(pdes, args.pde)(args)
         self.manifold = getattr(manifolds, args.manifold)()
         self.c = args.c

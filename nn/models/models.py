@@ -70,15 +70,16 @@ class MLP(eqx.Module):
         dims, act = get_dim_act(args)
         self.drop_fn = eqx.nn.Dropout(args.dropout)
         layers = []
+        key, subkey = jax.random.split(prng_key)
         for i in range(len(dims) - 1):
             in_dim, out_dim = dims[i], dims[i + 1]
-            layers.append(Linear(in_dim, out_dim, args.dropout, act))
+            layers.append(Linear(in_dim, out_dim, args.dropout, act, subkey))
+            key, subkey = jax.random.split(key)
         self.layers = nn.Sequential(layers)
 
     def __call__(self, x, key=prng_key):
         for layer in self.layers:
-            x = layer(x)
-            #x = self.drop_fn(x, key=key)
+            x = layer(x, key)
         return x
 
 class GCN(Model):

@@ -40,7 +40,7 @@ config_args = {
         
         # specify models. pde function layers are the same as the decoder layers by default.
         'encoder': ('HGCN', 'which encoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
-        'decoder': ('HNN', 'which decoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
+        'decoder': ('MLP', 'which decoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
         'pde': ('neural_burgers', 'which PDE to use for the PINN loss'),
         
         # dims of neural nets. -1 will be inferred based on args.skip and args.time_enc. 
