@@ -129,7 +129,7 @@ class COSYNN(eqx.Module):
         tx,z = self.encode(x0, adj, t)
         (u, ttxz), grad, lap_x = jax.vmap(vgl)(tx,z)
         mask = self.mask(x0)
-        f = jnp.sqrt(jnp.square(u)).sum(1) - .01
+        f = jnp.sqrt(jnp.square(u).sum(1))
         loss_data = jax.lax.square(f - y)
         resid = self.pde_res(tx, z, tau, u, grad, lap_x) 
         loss_pde = jax.lax.square(resid).sum(1)
@@ -159,8 +159,9 @@ class COSYNN(eqx.Module):
 
 def _forward(model, x0, t, tau, adj):
     tx, z = model.encode(x0, adj, t)
-    dec = lambda tx, z: decode(tx, z, tau)
-    return jax.vmap(dec)(tx, z)
+    dec = lambda tx, z: model.decode(tx, z, tau)
+    u = jax.vmap(dec)(tx, z)[0]
+    return jnp.sqrt(jnp.square(u)).sum(2)
 
 @eqx.filter_jit
 @eqx.filter_value_and_grad
@@ -178,4 +179,3 @@ def make_step(grads, model, opt_state, optim):
     updates, opt_state = optim.update(grads, opt_state, params=eqx.filter(model, eqx.is_inexact_array))
     model = eqx.apply_updates(model,updates)
     return model, opt_state
-

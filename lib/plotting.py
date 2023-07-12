@@ -74,7 +74,7 @@ def mask_plot(y):
     return yy[mask]
 
 def _plot(model, u, y, tau, i=0, j=-1, n=4, offset=0):
-    plt.rcParams['figure.figsize'] = [20,10]; 
+    plt.rcParams['figure.figsize'] = [12,8]; 
     u = onp.array(u)
     y = onp.array(y)
     if j==-1: j = u.shape[0]
@@ -83,17 +83,17 @@ def _plot(model, u, y, tau, i=0, j=-1, n=4, offset=0):
     enc,dec = model.encoder.__class__.__name__, model.decoder.__class__.__name__
     for k in range(n):
         if k == 0 : 
-            ax = pd.DataFrame(u[i:j,k],columns=[rf'$u_{k+1}(t)$ PINN[{enc},{dec}]']).shift(offset).dropna().plot(color=colors[k])
+            ax = pd.DataFrame(u[i:j,k], columns=[rf'$u_{k+1}(t)$ PINN[{enc},{dec}]']).shift(offset).dropna().plot(color=colors[k])
             df = mask_plot(y[i:j,k])
             df.columns = ['_none']
             df.plot(ax=ax, color=colors[k], marker='o', markersize=5, markerfacecolor='none', linestyle='none') 
         elif k < n-1 : 
-            pd.DataFrame(u[i:j,k],columns=[rf'$u_{k+1}(t)$ PINN[{enc},{dec}]']).shift(offset).dropna().plot(ax=ax, color=colors[k])
+            pd.DataFrame(u[i:j,k], columns=[rf'$u_{k+1}(t)$ PINN[{enc},{dec}]']).shift(offset).dropna().plot(ax=ax, color=colors[k])
             df = mask_plot(y[i:j,k])
             df.columns = ['_none']
             df.plot(ax=ax, color=colors[k], marker='o', markersize=5, markerfacecolor='none', linestyle='none') 
         elif k == n-1 :
-            pd.DataFrame(u[i:j,k],columns=[rf'$u_{k+1}(t)$ PINN[{enc},{dec}]']).shift(offset).dropna().plot(ax=ax, color='C7')
+            pd.DataFrame(u[i:j,k], columns=[rf'$u_{k+1}(t)$ PINN[{enc},{dec}]']).shift(offset).dropna().plot(ax=ax, color='C7')
             df = mask_plot(y[i:j,k])
             df.columns = ['data']
             df.plot(ax=ax, color='k', marker='o', markersize=5, markerfacecolor='none', linestyle='none')
@@ -115,8 +115,9 @@ def inference_plot(model, x, adj, tau, i=0, j=-1, n=4):
     idx = tp.astype(int)
     xp = _batch(model, x, idx)
     res = jax.vmap(m)(xp,tp)
-    u = res[0].squeeze()
+    u = res.squeeze()
     y = x[:,idx+tau].T
+    #return res,u,y
     _plot(model, u, y, tau, i, j, n)
 
 def plot_u(k=0, tau=60, i=0, j=-1, n=4, **kwargs):
