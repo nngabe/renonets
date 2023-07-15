@@ -100,19 +100,23 @@ class COSYNN(eqx.Module):
         lap_x = hess[:,1:].sum(1)
         return (u.flatten(), ttxz), grad, lap_x
 
+    #@eqx.filter_value_and_grad
     def pde_res(self, tx, z, tau, u, grad, lap_x):
-        grad_t = grad[:,:,0]
-        grad_x = grad[:,:,1:]
-        tau = tau * jnp.ones_like(u[:,:1])  
-        xop = jax.vmap(self.align_pde)(tx, z, tau, u) # argument for neural operators
-        F = jax.vmap(self.pde.F)(xop).reshape(-1,1)
-        v = jax.vmap(self.pde.v)(xop).reshape(-1,1)
-        
+        grad_t = grad[:,0]
+        grad_x = grad[:,1:]
+        uttxz = self.align_pde(tx, z, tau, u)
+        F = 1. * jax.nn.sigmoid(self.pde.F(uttxz))
+        v = 0.1 * jax.nn.sigmoid(self.pde.v(uttxz))
+
         f0 = grad_t
-        f1 = -F * jnp.einsum('mp,mqp->mq', u, grad_x)
+        f1 = -F * jnp.einsum('j,ij -> i', u, grad_x)
         f2 = v * lap_x
-        resid = f0 - f1 - f2
-        return resid
+        res = f0 - f1 - f2
+        return res, res
+
+    def pde_res_grad(self, tx, z, tau, u, grad, lap_x):
+        gpde, res = jax.jacfwd(self.pde_res, has_aux=True)(tx, z, tau, u, grad, lap_x)
+        return res, gpde
 
     def div(self, grad_x):
         return jax.vmap(jnp.diag).sum()
@@ -125,18 +129,19 @@ class COSYNN(eqx.Module):
         return jax.vmap(jnp.sum)(jnp.abs(grad_x))
 
     def loss_single(self, x0, adj, t, tau, y, terms=False):
-        vgl = lambda tx,z: self.val_grad_lap(tx, z, tau)
+        taus = tau * jnp.ones((x0.shape[0],1))
         tx,z = self.encode(x0, adj, t)
-        (u, ttxz), grad, lap_x = jax.vmap(vgl)(tx,z)
+        (u, ttxz), grad, lap_x = jax.vmap(self.val_grad_lap)(tx, z, taus)
         mask = self.mask(x0)
         f = jnp.sqrt(jnp.square(u).sum(1))
-        loss_data = jax.lax.square(f - y)
-        resid = self.pde_res(tx, z, tau, u, grad, lap_x) 
-        loss_pde = jax.lax.square(resid).sum(1)
+        loss_data = jnp.square(f - y)
+        resid, gpde = jax.vmap(self.pde_res_grad)(tx, z, taus, u, grad, lap_x) 
+        loss_pde = jnp.einsum('i... -> i', jnp.square(resid))
+        loss_gpde = jnp.einsum('i... -> i', jnp.square(gpde))
         loss_data *= mask
         loss_pde *= mask
         if terms: 
-            return loss_data.sum(), loss_pde.sum() 
+            return loss_data.sum(), loss_pde.sum(),  
         else:
             loss = self.w_data * loss_data + self.w_pde * loss_pde
             return loss.sum()
