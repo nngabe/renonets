@@ -100,7 +100,6 @@ class COSYNN(eqx.Module):
         lap_x = hess[:,1:].sum(1)
         return (u.flatten(), ttxz), grad, lap_x
 
-    #@eqx.filter_value_and_grad
     def pde_res(self, tx, z, tau, u, grad, lap_x):
         grad_t = grad[:,0]
         grad_x = grad[:,1:]
@@ -138,13 +137,14 @@ class COSYNN(eqx.Module):
         resid, gpde = jax.vmap(self.pde_res_grad)(tx, z, taus, u, grad, lap_x) 
         loss_pde = jnp.einsum('i... -> i', jnp.square(resid))
         loss_gpde = jnp.einsum('i... -> i', jnp.square(gpde))
-        loss_data *= mask
-        loss_pde *= mask
+        loss_data = (mask * loss_data).sum()
+        loss_pde = (mask * loss_pde).sum()
+        loss_gpde = (mask * loss_gpde).sum()
         if terms: 
-            return loss_data.sum(), loss_pde.sum(),  
+            return loss_data, loss_pde+loss_gpde  
         else:
-            loss = self.w_data * loss_data + self.w_pde * loss_pde
-            return loss.sum()
+            loss = self.w_data * loss_data + self.w_pde * (loss_pde + loss_gpde)
+            return loss
 
     def loss_batch(self, xb, adj, tb, tau, yb, terms=False):
         sloss = lambda x,t,y: self.loss_single(x, adj, t, tau, y, terms=terms)

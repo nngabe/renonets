@@ -31,11 +31,11 @@ config_args = {
         # which layers use time encodings and what dim should encodings be
         'time_enc': ([0,1,1], 'whether to insert time encoding in encoder, decoder, and pde functions, respectively.'),
         'time_dim': (12, 'dimension of time embedding'), 
-        'x_dim': (8, 'dimension of differentiable coordinates for PDE'),
+        'x_dim': (4, 'dimension of differentiable coordinates for PDE'),
  
         # input/output sizes
         'kappa': (60, 'size of lookback window used as input to encoder'),
-        'tau_max': (60, 'maximum steps ahead forecast'),
+        'tau_max': (10, 'maximum steps ahead forecast'),
         'tau_num': (10, 'number of tau steps for each training bundle'),
         
         # specify models. pde function layers are the same as the decoder layers by default.
