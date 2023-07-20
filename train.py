@@ -114,10 +114,10 @@ if __name__ == '__main__':
             xi = _batch(x, idx)
             
             terms = compute_bundle_terms(model, xi, adj, ti, taus, yi)
-            loss_data, loss_pde = terms[0].mean(), terms[1].mean()
-            log['loss'][i] = [loss_data.item(), loss_pde.item()]
+            loss_data, loss_pde, loss_gpde, loss_ent = [term.mean() for term in terms]
+            log['loss'][i] = [loss_data.item(), loss_pde.item(), loss_gpde.item(), loss_ent.item()]
             if args.verbose:
-                print(f'{i:04d}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
+                print(f'{i:04d}/{args.epochs}: loss_data = {loss_data:.2e}, loss_pde = {loss_pde:.2e}, loss_gpde = {loss_gpde:.2e}, loss_ent = {loss_ent:.2e}  lr = {schedule(i).item():.4e}')
             x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, seed=i)
             model = eqx.tree_inference(model, value=False)
         if i % args.log_freq * 10 == 0:

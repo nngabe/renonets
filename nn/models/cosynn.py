@@ -18,6 +18,8 @@ class COSYNN(eqx.Module):
     c: jnp.float32
     w_data: jnp.float32
     w_pde: jnp.float32
+    w_gpde: jnp.float32
+    w_ent: jnp.float32
     x_dim: int
     t_dim: int
     pool_dims: List[int]
@@ -36,6 +38,8 @@ class COSYNN(eqx.Module):
         self.c = args.c
         self.w_data = args.w_data
         self.w_pde = args.w_pde
+        self.w_gpde = args.w_gpde
+        self.w_ent = args.w_ent
         self.x_dim = args.x_dim
         self.t_dim = args.time_dim
         self.pool_dims = [self.pool.pools[i].layers[-1].linear.bias.shape[0] for i in self.pool.pools]
@@ -69,7 +73,6 @@ class COSYNN(eqx.Module):
     def mask(self, x):
         mask0 =  jnp.abs(x[:,0]-10.) > 1e-7
         mask = jnp.concatenate([mask0, jnp.ones(sum(self.pool_dims), dtype=bool)],axis=0)
-        #self.mask = mask
         return mask0
 
     def encode(self, x0, adj, t, eps=0.):
@@ -108,7 +111,7 @@ class COSYNN(eqx.Module):
 
     def renorm(self, z, adj, y, inspect=False):
         w = None
-        H = 0.
+        loss_ent = 0.
         S = {}
         A = {}
         z_r = z
@@ -123,12 +126,12 @@ class COSYNN(eqx.Module):
             adj, w = dense_to_coo(A[i])
             z_r = jnp.concatenate([z_r, z], axis=0)
             y_r = jnp.concatenate([y_r, y], axis=0)
-            H += jax.scipy.special.entr(S[i]).sum()
+            loss_ent += jax.scipy.special.entr(S[i]).sum()
 
         if inspect:
-            return z_r, y_r, H, S, A
+            return z_r, y_r, loss_ent, S, A
         else:
-            return z_r, y_r, H
+            return z_r, y_r, loss_ent
 
     def val_grad(self, tx, z, tau):
         f = lambda tx: self.decode(tx,z,tau)
@@ -174,11 +177,11 @@ class COSYNN(eqx.Module):
         tx,z = self.encode(x0, adj, t)
         if test:
             # compute entropy and align separately from renorm
-            _, _, H = self.renorm(z, adj, y)
+            _, _, loss_ent = self.renorm(z, adj, y)
             z = self.align_pool(z)
         else: 
             # renorm z and y only in training loop  
-            z, y, H = self.renorm(z, adj, y)
+            z, y, loss_ent = self.renorm(z, adj, y)
             tx = tx[0] * jnp.ones((z.shape[0],1))
         taus = tau * jnp.ones((z.shape[0],1))
         (u, ttxz), grad, lap_x = jax.vmap(self.val_grad_lap)(tx, z, taus)
@@ -192,9 +195,9 @@ class COSYNN(eqx.Module):
         #loss_pde = (mask * loss_pde).sum()
         #loss_gpde = (mask * loss_gpde).sum()
         if test: 
-            return loss_data, loss_pde+loss_gpde  
+            return loss_data, loss_pde, loss_gpde, loss_ent  
         else:
-            loss = self.w_data * loss_data + self.w_pde * (loss_pde + loss_gpde)
+            loss = self.w_data * loss_data + self.w_pde * (loss_pde + self.w_gpde * loss_gpde) + self.w_ent * loss_ent
             return loss
 
     def loss_batch(self, xb, adj, tb, tau, yb, test=False):
@@ -226,8 +229,8 @@ def loss_bundle(model, xb, adj, tb, taus, yb):
 
 @eqx.filter_jit
 def compute_bundle_terms(model, xb, adj, tb, taus, yb):
-    ldata, lpde = model.loss_bundle(xb, adj, tb, taus, yb, test=True)
-    return ldata, lpde
+    terms = model.loss_bundle(xb, adj, tb, taus, yb, test=True)
+    return terms
 
 # updating model parameters and optimizer state
 @eqx.filter_jit

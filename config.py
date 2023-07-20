@@ -27,6 +27,8 @@ config_args = {
         # loss weights
         'w_data': (1., 'weight for data loss.'),
         'w_pde': (1., 'weight for pde loss.'),
+        'w_gpde': (1., 'weight for gpde loss.'),
+        'w_ent': (1e+3, 'weight for assignment matrix entropy loss.'),
         'input_scaler': (1., 'rescaling of input'),
         'rep_scaler': (8., 'rescaling of graph features'),
         'tau_scaler': (8., 'rescaling of tau encoding'),
