@@ -19,11 +19,10 @@ act_dict = {'relu': jax.nn.relu, 'silu': jax.nn.silu, 'lrelu': jax.nn.leaky_relu
 
 def get_dim_act(args):
     """
-    Helper function to get dimension and activation at every layer.
+    Helper function to get dimension and activation at every layer_
     :param args:
     :return:
     """
-
     if args.enc_init:
         act = act_dict[args.act_enc] if args.act_enc in act_dict else jax.nn.silu
         args.num_layers = len(args.enc_dims)
@@ -40,11 +39,25 @@ def get_dim_act(args):
         args.num_layers = len(args.pde_dims)
         dims = args.pde_dims
         args.pde_init -= 1
+    elif args.pool_init:
+        act = act_dict[args.act_pool] if args.act_pool in act_dict else jax.nn.silu
+        args.num_layers = len(args.pool_dims)
+        dims = args.pool_dims
+        args.pool_dims[-1] = max(args.pool_dims[-1]//args.pool_red, 1)
+        args.pool_init -= 1
+
     else:
-        print('All layers already init-ed! Define additional layers or reset args.')
+        print('All layers already init-ed! Define additional layers if needed.')
         raise
 
-    return dims, act
+    
+    # for now curvatures are static, change list -> jax.ndarray to make them learnable
+    if args.c is None:
+        curvatures = [1. for _ in range(args.num_layers)]
+    else:
+        curvatures = [args.c for _ in range(args.num_layers)]
+
+    return dims, act, curvatures
 
 
 class Linear(eqx.Module): 
@@ -70,7 +83,7 @@ class Linear(eqx.Module):
         return out
 
 
-class GraphConvolution(eqx.Module):
+class GCNConv(eqx.Module):
     """GCN layer with symmetric normalization"""
     p: float
     linear: eqx.nn.Linear
@@ -78,7 +91,7 @@ class GraphConvolution(eqx.Module):
     dropout: Callable
 
     def __init__(self, in_features, out_features, p=0., act=jax.nn.silu, use_bias=True):
-        super(GraphConvolution, self).__init__()
+        super(GCNConv, self).__init__()
         self.p = p
         self.linear = nn.Linear(in_features, out_features, use_bias, key=prng_key)
         self.act = act
@@ -101,55 +114,43 @@ class GraphConvolution(eqx.Module):
         output = h, adj
         return output
 
-    def extra_repr(self):
-        return 'input_dim={}, output_dim={}'.format(
-                self.in_features, self.out_features
-        )
 
 
 
-class GATConvolution(eqx.Module):
+class GATConv(eqx.Module):
     """GAT  layer."""
-    p: float
     linear: eqx.nn.Linear
-    query_fn: eqx.nn.Linear
     a: eqx.nn.Linear
     W: eqx.nn.Linear
     act: Callable
     dropout: Callable
 
-    def __init__(self, in_features, out_features, dropout=0., act=jax.nn.silu, use_bias=True, num_heads=3, query_dim=8):
-        super(GraphConvolution, self).__init__()
-        self.dropout = dropout
+    def __init__(self, in_features, out_features, p=0., act=jax.nn.silu, use_bias=True, num_heads=3, query_dim=8):
+        super(GATConv, self).__init__()
+        self.dropout = dropout(p)
         self.W = nn.Linear(in_features, query_dim * num_heads, key=prng_key) 
-        self.a = nn.linear( 2 * query_dim * num_heads, num_heads, key=prng_key) 
+        self.a = nn.Linear( 2 * query_dim * num_heads, num_heads, key=prng_key) 
         self.linear = nn.Linear(in_features, out_features,  key=prng_key)
         self.act = act
 
-    def forward(self, input):
+    def __call__(self, x, key=prng_key):
         x, adj = input
         n = x.shape[0]
-        s, r = adj[0], adj[1]
-        attr = self.query_fn(x)
+        s = r = jnp.arange(0,n)
+        attr = jax.vmap(self.W)(x)
         sender_attr = attr[s]
         receiver_attr = attr[r]
 
         e = jnp.concatenate((sender_attr,receiver_attr), axis=1)
-        e = self.W(e)
-        alpha = e 
+        alpha = jax.vmap(self.a)(e)
         
-        h = self.linear.forward(x)
-        h = dropout(self.p)(hidden, inference=False, key=prng_key)
-        
-        h = tree.tree_map(lambda x: jax.segment_sum(x[s], r, n), h)
+        h = dropout(h, key=key)
+         
+        h = tree.tree_map(lambda x: jax.segment_sum(x[s] * alpha[s], r, n), h)
         
         h = self.act(h)
 
         output = h, adj
         return output
 
-    def extra_repr(self):
-        return 'input_dim={}, output_dim={}'.format(
-                self.in_features, self.out_features
-        )
 

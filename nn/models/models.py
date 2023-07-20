@@ -2,7 +2,7 @@ from typing import Any, Optional, Sequence, Tuple, Union
 
 import manifolds
 import layers.hyp_layers as hyp_layers
-from layers.layers import GraphConvolution, Linear, get_dim_act
+from layers.layers import GCNConv, GATConv, Linear, get_dim_act
 import utils.math_utils as pmath
 
 import numpy as np
@@ -33,28 +33,28 @@ class Model(eqx.Module):
         self.c = args.c
         self.skip = args.skip
 
-    def __call__(self, x, adj=None):
+    def __call__(self, x, adj=None, w=None):
         if self.skip:
-            return self._cat(x,adj)
+            return self._cat(x, adj, w)
         else:
-            return self._plain(x,adj)
+            return self._plain(x, adj, w)
 
-    def _plain(self, x, adj=None):
+    def _plain(self, x, adj=None, w=None):
         for layer in self.layers:
             if self.encode_graph:
-                x,_ = layer(x,adj)
+                x,_ = layer(x, adj, w)
             else:
                 x = layer(x)
         return x 
 
-    def _cat(self, x, adj=None):
+    def _cat(self, x, adj=None, w=None):
         x_i = [x]
         x = self.manifold.proj_tan0(x, c=self.c)
         x = self.manifold.expmap0(x, c=self.c)
         x = self.manifold.proj(x, c=self.c)
         for layer in self.layers:
             if self.encode_graph:
-                x,_ = layer(x,adj)
+                x,_ = layer(x, adj, w)
                 x_i.append(x)
             else:
                 x = layer(x)
@@ -67,7 +67,7 @@ class MLP(eqx.Module):
 
     def __init__(self, args):
         super(MLP, self).__init__()
-        dims, act = get_dim_act(args)
+        dims, act, _ = get_dim_act(args)
         self.drop_fn = eqx.nn.Dropout(args.dropout)
         layers = []
         key, subkey = jax.random.split(prng_key)
@@ -89,11 +89,11 @@ class GCN(Model):
 
     def __init__(self, args):
         super(GCN, self).__init__(args)
-        dims, act = get_dim_act(args)
+        dims, act, _ = get_dim_act(args)
         gc_layers = []
         for i in range(len(dims) - 1):
             in_dim, out_dim = dims[i], dims[i + 1]
-            gc_layers.append(GraphConvolution(in_dim, out_dim, args.dropout, act, args.bias))
+            gc_layers.append(GCNConv(in_dim, out_dim, args.dropout, act, args.bias))
         self.layers = nn.Sequential(gc_layers)
         self.encode_graph = True
 
@@ -104,16 +104,15 @@ class GAT(Model):
 
     def __init__(self, args):
         super(GAT, self).__init__(args)
-        dims, act = get_dim_act(args)
+        dims, act, _ = get_dim_act(args)
         gat_layers = []
         for i in range(len(dims) - 1):
             in_dim, out_dim = dims[i], dims[i + 1]
-            act = acts[i]
             assert dims[i + 1] % args.n_heads == 0
             out_dim = dims[i + 1] // args.n_heads
             concat = True
             gat_layers.append(
-                    GraphAttentionLayer(in_dim, out_dim, args.dropout, act, args.alpha, args.n_heads, concat))
+                    GATConv(in_dim, out_dim, args.dropout, act, args.alpha, args.n_heads, concat))
         self.layers = nn.Sequential(gat_layers)
         self.encode_graph = True
 
@@ -124,7 +123,7 @@ class HNN(Model):
     curvatures: list
     def __init__(self, args):
         super(HNN, self).__init__(args)
-        dims, act, self.curvatures = hyp_layers.get_dim_act_curv(args) 
+        dims, act, self.curvatures = get_dim_act(args)
         self.manifold = getattr(manifolds, args.manifold if args.dec_init else args.manifold_pinn)() 
         hnn_layers = []
         for i in range(len(dims) - 1):
@@ -144,19 +143,18 @@ class HGCN(Model):
     def __init__(self, args):
         super(HGCN, self).__init__(args)
         self.manifold = getattr(manifolds, args.manifold)()
-        dims, act, self.curvatures = hyp_layers.get_dim_act_curv(args)
+        dims, act, self.curvatures = get_dim_act(args)
         self.curvatures.append(args.c)
         hgc_layers = []
         for i in range(len(dims) - 1):
             c_in, c_out = self.curvatures[i], self.curvatures[i + 1]
             in_dim, out_dim = dims[i], dims[i + 1]
             hgc_layers.append(hyp_layers.HGCNLayer(
-                            self.manifold, in_dim, out_dim, c_in, c_out, args.dropout, act, args.bias, args.use_att, args.local_agg
-                                )
+                            self.manifold, in_dim, out_dim, c_in, c_out, args.dropout, act, args.bias, args.use_att)
                             )
         self.layers = nn.Sequential(hgc_layers)
         self.encode_graph = True
 
-    def __call__(self, x, adj):
-        return super(HGCN, self).__call__(x, adj=adj)
+    def __call__(self, x, adj, w=None):
+        return super(HGCN, self).__call__(x, adj, w)
 

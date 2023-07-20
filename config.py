@@ -13,13 +13,16 @@ config_args = {
         'log_freq': (100, 'how often to compute print train/val metrics (in epochs)'),
         'max_norm': (1., 'max norm for gradient clipping, or None for no gradient clipping'),
         'verbose': (True, 'print training data to console'),
-        'opt_study': (False, 'whether to run a hyperparameter optimization study or not')
+        'opt_study': (False, 'whether to run a hyperparameter optimization study or not'),
+        'batch_red': (2, 'factor of reduction for batch size'),
+        'pool_red': (4, 'factor of reduction for each pooling step'),
     },
     'model_config': {
         # init flags for neural nets
         'enc_init': (1, 'flag indicating whether the encoder remains to be init-ed or not.'),
         'dec_init': (1, 'flag indicating whether the decoder remains to be init-ed or not.'),
         'pde_init': (2, 'flag indicating number of pde functions which remain to be init-ed.'),
+        'pool_init': (3, 'flag indicating number of pooling modules which remain to be init-ed.'),
         
         # loss weights
         'w_data': (1., 'weight for data loss.'),
@@ -42,7 +45,8 @@ config_args = {
         'encoder': ('HGCN', 'which encoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
         'decoder': ('MLP', 'which decoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
         'pde': ('neural_burgers', 'which PDE to use for the PINN loss'),
-        
+        'pool': ('HGCN', 'which model to compute coarsening matrices'),
+
         # dims of neural nets. -1 will be inferred based on args.skip and args.time_enc. 
         'k_x_dim': (1, 'width of last encoder dim as multiple of x_dim'),
         'enc_width': (96, 'dimensions of encoder layers'),
@@ -52,19 +56,20 @@ config_args = {
         'dec_depth': (3,'dimensions of decoder layers'),
         'pde_depth': (3, 'dimensions of each pde layers'),
         'enc_dims': ([-1,96,-1], 'dimensions of encoder layers'),
-        'dec_dims': ([-1,256,256,1],'dimensions of decoder layers'),
+        'dec_dims': ([-1,256,256,-1],'dimensions of decoder layers'),
         'pde_dims': ([-1,192,192,1], 'dimensions of each pde layers'),
-        
+        'pool_dims': ([-1,96,-1], 'dimesions of pooling layers.'), 
         #activations for each network
         'act_enc': ('silu', 'which activation function to use (or None for no activation)'),
         'act_dec': ('silu', 'which activation function to use (or None for no activation)'),
         'act_pde': ('silu', 'which activation function to use (or None for no activation)'),
+        'act_pool': ('silu', 'which activation function to use (or None for no activation)'),
        
         # additional params for layer specification
         'bias': (1, 'whether to use bias in layers or not'),
         'skip': (1, 'whether to use skip connections or not. set to 0 after encoder init.'),
         'manifold': ('PoincareBall', 'which manifold to use, can be any of [Euclidean, Hyperboloid, PoincareBall]'),
-        'manifold_pinn': ('Euclidean', 'manifold for PINN, i.e. decoder and pde'),
+        'manifold_pool': ('PoincareBall', 'which manifold to use, can be any of [Euclidean, Hyperboloid, PoincareBall]'),
         'c': (1.0, 'hyperbolic radius, set to None for trainable curvature'),
         
         # graph encoder params
@@ -93,6 +98,7 @@ def set_dims(args):
         args.dec_dims[0] = args.enc_dims[-1] + args.time_enc[1] * args.time_dim * 2
     
     args.pde_dims[0] = args.dec_dims[0] + args.x_dim
+    args.pool_dims[0] = sum(args.enc_dims) - args.x_dim 
 
 parser = argparse.ArgumentParser()
 for _, config_dict in config_args.items():

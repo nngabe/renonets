@@ -29,18 +29,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.data_path = glob.glob(f'../data_cosynn/gels*{args.path}*')[0]
     args.adj_path = glob.glob(f'../data_cosynn/adj*{args.path.split("_")[:-1]}*')[0]
-    
-    if args.log_path:
-        model, args = utils.read_model(args)
-    else:
-        model = COSYNN(args)
-    
-    if args.verbose: 
-        print(f'\nMODULE: MODEL[DIMS](curv)')
-        print(f' encoder: {args.encoder}{args.enc_dims}({args.c})')
-        print(f' decoder: {args.decoder}{args.dec_dims}')
-        print(f' pde: {args.pde}/{args.decoder}{args.pde_dims}')
-        print(f' time_enc: linlog[{args.time_dim}]\n')
 
     A = pd.read_csv(args.adj_path, index_col=0).to_numpy()
     adj = jnp.array(jnp.where(A))
@@ -51,6 +39,26 @@ if __name__ == '__main__':
     x_test, adj_test, idx_test = louvain_subgraph(x, adj, batch_size=n//10)
     idx_train = jnp.where(jnp.ones(n, dtype=jnp.int32).at[idx_test].set(0))[0]    
     x_train, adj_train, idx_train = subgraph(idx_train, x, adj)
+
+    args.batch_size = sup_power_of_two(n//args.batch_red)
+    args.pool_dims[-1] = sup_power_of_two(2 * n//args.pool_red)
+    if args.log_path:
+        model, args = utils.read_model(args)
+    else:
+        model = COSYNN(args)
+    
+    if args.verbose: 
+        print(f'\nMODULE: MODEL[DIMS](curv)')
+        print(f' encoder: {args.encoder}{args.enc_dims}({args.c})')
+        print(f' decoder: {args.decoder}{args.dec_dims}')
+        print(f' pde: {args.pde}/{args.decoder}{args.pde_dims}')
+        for i in model.pool.pools.keys(): 
+            pdims = args.pool_dims
+            pdims[-1] = model.pool_dims[i] #sup_power_of_two(n // args.batch_red) // (args.pool_red)**(i+1)
+            print(f' pool_{i}: {args.pool}{pdims}')
+        print(f' time_enc: linlog[{args.time_dim}]\n')
+
+
     
     log = {}
     log['args'] = vars(copy.copy(args))
@@ -80,7 +88,8 @@ if __name__ == '__main__':
    
     stamp = str(int(time.time()))
     log['loss'] = {}
-    x, adj, _   = random_subgraph(x_train, adj_train, batch_size=n//10, seed=0)
+    x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, seed=0)
+    
     for i in range(args.epochs):
         ti = jax.random.randint(prng(i), (10, 1), args.kappa, T - args.tau_max).astype(jnp.float32)
         idx = ti.astype(int)
@@ -109,12 +118,10 @@ if __name__ == '__main__':
             log['loss'][i] = [loss_data.item(), loss_pde.item()]
             if args.verbose:
                 print(f'{i:04d}/{args.epochs}: loss_data = {loss_data:.4e}, loss_pde = {loss_pde:.4e}, lr = {schedule(i).item():.4e}')
-            x, adj, _   = random_subgraph(x_train, adj_train, batch_size=n//2, seed=i)
+            x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, seed=i)
             model = eqx.tree_inference(model, value=False)
         if i % args.log_freq * 10 == 0:
             utils.save_model(model, log, stamp=stamp)
-    
-    utils.save_model(model, log, stamp=stamp)
-    loss = jnp.array(list(log['loss'].values()))
-    idx_min = jnp.argmin(loss[:,0] * loss[:,1]**.25)
 
+    log['wall_time'] = int(time.time()) - int(stamp) 
+    utils.save_model(model, log, stamp=stamp)

@@ -46,6 +46,13 @@ def sup_power_of_two(x: int) -> int:
         y *= 2
     return y
 
+def pad_adj(adj: jnp.ndarray, 
+            adj_size: int = None,
+            fill_value: int = -1) -> jnp.ndarray:
+    adj_size = sup_power_of_two(adj.shape[1]) if not adj_size else adj_size
+    adj_pad = fill_value * jnp.ones((adj.shape[0], adj_size-adj.shape[1]), dtype=jnp.int32)
+    return jnp.concatenate([adj, adj_pad],axis=1)
+
 def pad_graph(x: jnp.ndarray, 
               adj: jnp.ndarray, 
               x_size: int = None, 
@@ -55,6 +62,14 @@ def pad_graph(x: jnp.ndarray,
     x_pad = 1e+1*jnp.ones((x_size-x.shape[0], x.shape[1]))
     adj_pad = -1*jnp.ones((adj.shape[0], adj_size-adj.shape[1]), dtype=jnp.int32)
     return jnp.concatenate([x, x_pad], axis=0), jnp.concatenate([adj, adj_pad],axis=1)
+
+def dense_to_coo(A: jnp.ndarray) -> jnp.ndarray:
+    adj = jnp.mask_indices(A.shape[0], lambda x,k: x)
+    adj = jnp.array([adj[0],adj[1]])
+    w = A[adj[0],adj[1]]
+    w = pad_adj(w.reshape(-1,1).T, fill_value=0)
+    adj = pad_adj(adj)
+    return adj, w[0]
 
 def mask_pad(n: int, n_pad: int, flip: bool = False):
     mask = jnp.arange(0, n_pad, 1)<(n - 1)
