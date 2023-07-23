@@ -37,9 +37,9 @@ def read_model(args):
     else:
         print('need type(args) == dict or args.log_path == True !')
         raise
-    args.enc_init = 1
-    args.dec_init = 1
-    args.pde_init = 2
+    #args.enc_init = 1
+    #args.dec_init = 1
+    #args.pde_init = 2
     model = COSYNN(args)
     model = eqx.tree_deserialise_leaves(param_path, model)
     return model, args

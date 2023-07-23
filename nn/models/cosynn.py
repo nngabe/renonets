@@ -119,7 +119,8 @@ class COSYNN(eqx.Module):
         A[0] = jnp.zeros(z.shape[:1]*2).at[adj[0],adj[1]].set(1.)
         for i in self.pool.keys():
             ze = self.align_pool(z)
-            S[i] = jax.nn.softmax(self.pool[i](ze, adj, w), axis=0)
+            s = self.pool[i](ze, adj, w)
+            S[i] = jax.nn.softmax(self.logmap0(s), axis=0)
             z = jnp.einsum('ij,ik -> jk', S[i], ze)
             y = jnp.einsum('ij,i -> j', S[i], y)
             A[i+1] = jnp.einsum('ji,jk,kl -> il', S[i], A[i], S[i])
