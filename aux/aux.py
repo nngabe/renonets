@@ -30,16 +30,16 @@ class neural_burgers(eqx.Module):
 class pooling(eqx.Module):
     
     pools: Dict[int,eqx.Module]
-    L: int
-    kappa: int
+    embed: Dict[int,eqx.Module]
     
     def __init__(self, args):
         super(pooling, self).__init__()
         self.pools = {}
-        self.L = args.pool_init
-        self.kappa = args.kappa
-        for i in range(self.L):
+        self.embed = {}
+        for i in range(args.pool_init):
             self.pools[i] = getattr(models, args.pool)(args)
+        for i in range(args.embed_init):
+            self.embed[i] = getattr(models, args.pool)(args)
 
     def __getitem__(self, i):
         return self.pools[i]

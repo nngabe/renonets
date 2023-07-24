@@ -23,7 +23,7 @@ config_args = {
         'dec_init': (1, 'flag indicating whether the decoder remains to be init-ed or not.'),
         'pde_init': (2, 'flag indicating number of pde functions which remain to be init-ed.'),
         'pool_init': (3, 'flag indicating number of pooling modules which remain to be init-ed.'),
-        
+        'embed_init': (3, 'flag indicating number of embedding modules which remain to be init-ed.'), 
         # loss weights
         'w_data': (1., 'weight for data loss.'),
         'w_pde': (1., 'weight for pde loss.'),
@@ -61,6 +61,7 @@ config_args = {
         'dec_dims': ([-1,256,256,-1],'dimensions of decoder layers'),
         'pde_dims': ([-1,192,192,1], 'dimensions of each pde layers'),
         'pool_dims': ([-1,96,-1], 'dimesions of pooling layers.'), 
+        'embed_dims': ([-1,96,-1], 'dimensions of embedding layers.'),
         #activations for each network
         'act_enc': ('silu', 'which activation function to use (or None for no activation)'),
         'act_dec': ('silu', 'which activation function to use (or None for no activation)'),
@@ -78,6 +79,7 @@ config_args = {
         'n_heads': (4, 'number of attention heads for graph attention networks, must be a divisor dim'),
         'alpha': (0.2, 'alpha for leakyrelu in graph attention networks'),
         'use_att': (0, 'whether to use hyperbolic attention or not'),
+        'use_att_pool': (0, 'whether to use hyperbolic attention or not'),
         'local_agg': (0, 'whether to local tangent space aggregation or not')
     },
     'data_config': {
@@ -101,6 +103,8 @@ def set_dims(args):
     
     args.pde_dims[0] = args.dec_dims[0] + args.x_dim
     args.pool_dims[0] = sum(args.enc_dims) - args.x_dim 
+    args.embed_dims[0] = sum(args.enc_dims) - args.x_dim - args.kappa 
+    args.embed_dims[-1] = args.embed_dims[0]
 
 parser = argparse.ArgumentParser()
 for _, config_dict in config_args.items():

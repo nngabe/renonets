@@ -45,7 +45,11 @@ def get_dim_act(args):
         dims = args.pool_dims
         args.pool_dims[-1] = max(args.pool_dims[-1]//args.pool_red, 1)
         args.pool_init -= 1
-
+    elif args.embed_init: 
+        act = act_dict[args.act_pool] if args.act_pool in act_dict else jax.nn.silu
+        dims = args.embed_dims
+        args.embed_init -= 1
+        args.use_att = args.use_att_pool
     else:
         print('All layers already init-ed! Define additional layers if needed.')
         raise

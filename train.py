@@ -52,10 +52,14 @@ if __name__ == '__main__':
         print(f' encoder: {args.encoder}{args.enc_dims}({args.c})')
         print(f' decoder: {args.decoder}{args.dec_dims}')
         print(f' pde: {args.pde}/{args.decoder}{args.pde_dims}')
+        print(' pool:')
         for i in model.pool.pools.keys(): 
             pdims = args.pool_dims
             pdims[-1] = model.pool_dims[i] #sup_power_of_two(n // args.batch_red) // (args.pool_red)**(i+1)
-            print(f' pool_{i}: {args.pool}{pdims}')
+            print(f'   pool_{i}: {args.pool}{pdims}')
+        print(' embed:')
+        for i in model.pool.pools.keys(): 
+            print(f'   embed_{i}: {args.pool}{args.embed_dims}')
         print(f' time_enc: linlog[{args.time_dim}]\n')
 
 

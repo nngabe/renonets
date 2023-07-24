@@ -99,35 +99,46 @@ class COSYNN(eqx.Module):
         return uttxz
 
     def align_pool(self, z):
-        z0 = z[:self.kappa]
-        zi = z[self.kappa:]
+        z0 = z[:,:self.kappa]
+        zi = z[:,self.kappa:]
         zi = self.logmap0(zi)
-        return jnp.concatenate([z0,zi], axis=0)
+        return jnp.concatenate([z0,zi], axis=-1)
+
+    def embed_pool(self, z, adj, w, i):
+        z0 = z[:,:self.kappa]
+        zi = z[:,self.kappa:]
+        #zi = self.logmap0(zi)
+        zi = self.pool.embed[i](zi, adj, w)
+        zi = self.logmap0(zi)
+        z = jnp.concatenate([z0,zi], axis=-1)
+        #z = jnp.einsum('ij,ik -> jk', S, z)
+        return z
         
     def decode(self, tx, z, tau):
         ttxz = self.align(tx,z,tau)
         u = self.decoder(ttxz)
         return u, (u, ttxz)
 
-    def renorm(self, z, adj, y, inspect=False):
+    def renorm(self, x, adj, y, inspect=False):
         w = None
         loss_ent = 0.
         S = {}
         A = {}
-        z_r = z
+        z_r = x
         y_r = y
-        A[0] = jnp.zeros(z.shape[:1]*2).at[adj[0],adj[1]].set(1.)
+        A[0] = jnp.zeros(x.shape[:1]*2).at[adj[0],adj[1]].set(1.)
         for i in self.pool.keys():
-            ze = self.align_pool(z)
-            s = self.pool[i](ze, adj, w)
+            x = self.align_pool(x)
+            z = self.embed_pool(x, adj, w, i)
+            s = self.pool[i](x, adj, w)
             S[i] = jax.nn.softmax(self.logmap0(s), axis=0)
-            z = jnp.einsum('ij,ik -> jk', S[i], ze)
+            x = jnp.einsum('ij,ik -> jk', S[i], z)
             y = jnp.einsum('ij,i -> j', S[i], y)
             A[i+1] = jnp.einsum('ji,jk,kl -> il', S[i], A[i], S[i])
             adj, w = dense_to_coo(A[i])
-            z_r = jnp.concatenate([z_r, z], axis=0)
+            z_r = jnp.concatenate([z_r, x], axis=0)
             y_r = jnp.concatenate([y_r, y], axis=0)
-            loss_ent += jax.scipy.special.entr(S[i]).sum()
+            loss_ent += jnp.abs(S[i]).sum() #jax.scipy.special.entr(S[i]).sum()
 
         if inspect:
             return z_r, y_r, loss_ent, S, A
@@ -186,7 +197,6 @@ class COSYNN(eqx.Module):
             tx = tx[0] * jnp.ones((z.shape[0],1))
         taus = tau * jnp.ones((z.shape[0],1))
         (u, ttxz), grad, lap_x = jax.vmap(self.val_grad_lap)(tx, z, taus)
-        mask = self.mask(x0)
         f = jnp.sqrt(jnp.square(u).sum(1))
         loss_data = jnp.square(f - y).sum()
         resid, gpde = jax.vmap(self.pde_res_grad)(tx, z, taus, u, grad, lap_x) 
