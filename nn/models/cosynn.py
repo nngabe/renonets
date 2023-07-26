@@ -9,6 +9,8 @@ from nn.models import models
 from aux import aux
 from lib.graph_utils import dense_to_coo
 
+prng = lambda i: jax.random.PRNGKey(i)
+
 class COSYNN(eqx.Module):
     encoder: eqx.Module
     decoder: eqx.Module
@@ -114,7 +116,7 @@ class COSYNN(eqx.Module):
         #z = jnp.einsum('ij,ik -> jk', S, z)
         return z
         
-    def decode(self, tx, z, tau):
+    def decode(self, tx, z, tau, key=prng(0)):
         ttxz = self.align(tx,z,tau)
         u = self.decoder(ttxz)
         return u, (u, ttxz)
@@ -131,7 +133,7 @@ class COSYNN(eqx.Module):
             x = self.align_pool(x)
             z = self.embed_pool(x, adj, w, i)
             s = self.pool[i](x, adj, w)
-            S[i] = jax.nn.softmax(self.logmap0(s), axis=0)
+            S[i] = jax.nn.softmax(self.logmap0(s) * 20., axis=0)
             x = jnp.einsum('ij,ik -> jk', S[i], z)
             y = jnp.einsum('ij,i -> j', S[i], y)
             A[i+1] = jnp.einsum('ji,jk,kl -> il', S[i], A[i], S[i])
@@ -163,7 +165,7 @@ class COSYNN(eqx.Module):
         grad_x = grad[:,1:]
         uttxz = self.align_pde(tx, z, tau, u)
         F = 1. * jax.nn.sigmoid(self.pde.F(uttxz))
-        v = 0.1 * jax.nn.sigmoid(self.pde.v(uttxz))
+        v = 0.01 * jax.nn.sigmoid(self.pde.v(uttxz))
 
         f0 = grad_t
         f1 = -F * jnp.einsum('j,ij -> i', u, grad_x)
@@ -185,7 +187,7 @@ class COSYNN(eqx.Module):
     def enstrophy(self, grad_x):
         return jax.vmap(jnp.sum)(jnp.abs(grad_x))
 
-    def loss_single(self, x0, adj, t, tau, y, test=False):
+    def loss_single(self, x0, adj, t, tau, y, key, test=False):
         tx,z = self.encode(x0, adj, t)
         if test:
             # compute entropy and align separately from renorm
@@ -202,26 +204,25 @@ class COSYNN(eqx.Module):
         resid, gpde = jax.vmap(self.pde_res_grad)(tx, z, taus, u, grad, lap_x) 
         loss_pde = jnp.square(resid).sum() #jnp.einsum('i... -> i', jnp.square(resid))
         loss_gpde = jnp.square(gpde).sum() #jnp.einsum('i... -> i', jnp.square(gpde))
-        #loss_data = (mask * loss_data).sum()
-        #loss_pde = (mask * loss_pde).sum()
-        #loss_gpde = (mask * loss_gpde).sum()
         if test: 
             return loss_data, loss_pde, loss_gpde, loss_ent  
         else:
             loss = self.w_data * loss_data + self.w_pde * (loss_pde + self.w_gpde * loss_gpde) + self.w_ent * loss_ent
             return loss
 
-    def loss_batch(self, xb, adj, tb, tau, yb, test=False):
-        sloss = lambda x,t,y: self.loss_single(x, adj, t, tau, y, test=test)
-        res = jax.vmap(sloss)(xb, tb, yb)
+    def loss_batch(self, xb, adj, tb, tau, yb, key, test=False):
+        kb = jax.random.split(key,xb.shape[0])
+        sloss = lambda x,t,y,k: self.loss_single(x, adj, t, tau, y, k, test=test)
+        res = jax.vmap(sloss)(xb, tb, yb, kb)
         if test: 
             return res
         else:
             return jnp.mean(res)
 
-    def loss_bundle(self, xb, adj, tb, taus, yb, test=False):
-        lbatch = lambda tau, y: self.loss_batch(xb, adj, tb, tau, y, test=test)
-        res = jax.vmap(lbatch)(taus,yb)
+    def loss_bundle(self, xb, adj, tb, taus, yb, key=prng(0), test=False):
+        kb = jax.random.split(key, taus.shape[0])
+        lbatch = lambda tau, y, k: self.loss_batch(xb, adj, tb, tau, y, k, test=test)
+        res = jax.vmap(lbatch)(taus,yb,kb)
         if test:
             return res
         else:

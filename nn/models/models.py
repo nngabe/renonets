@@ -80,6 +80,7 @@ class MLP(eqx.Module):
     def __call__(self, x, key=prng_key):
         for layer in self.layers:
             x = layer(x, key)
+            key = jax.random.split(key)[0]
         return x
 
 class GCN(Model):
