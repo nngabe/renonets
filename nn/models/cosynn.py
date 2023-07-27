@@ -219,7 +219,7 @@ class COSYNN(eqx.Module):
         else:
             return jnp.mean(res)
 
-    def loss_bundle(self, xb, adj, tb, taus, yb, key=prng(0), test=False):
+    def loss_bundle(self, xb, adj, tb, taus, yb, key, test=False):
         kb = jax.random.split(key, taus.shape[0])
         lbatch = lambda tau, y, k: self.loss_batch(xb, adj, tb, tau, y, k, test=test)
         res = jax.vmap(lbatch)(taus,yb,kb)
@@ -236,8 +236,8 @@ def _forward(model, x0, t, tau, adj):
 
 @eqx.filter_jit
 @eqx.filter_value_and_grad
-def loss_bundle(model, xb, adj, tb, taus, yb):
-    return model.loss_bundle(xb, adj, tb, taus, yb)
+def loss_bundle(model, xb, adj, tb, taus, yb, key=prng(0)):
+    return model.loss_bundle(xb, adj, tb, taus, yb, key)
 
 @eqx.filter_jit
 def compute_bundle_terms(model, xb, adj, tb, taus, yb):
