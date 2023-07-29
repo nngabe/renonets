@@ -73,8 +73,8 @@ if __name__ == '__main__':
         print(f'\nx[train] = {x[idx_train].shape}, adj[train] = {adj_train.shape}')
         print(f'x[test]  = {x[idx_test].shape},  adj[test]  = {adj_test.shape}')
     
-    schedule = optax.warmup_exponential_decay_schedule(args.lr/1e+1, peak_value=args.lr, warmup_steps=args.epochs//10,
-                                                        transition_steps=args.epochs, decay_rate=1e-2, end_value=args.lr/1e+1)
+    schedule = optax.warmup_exponential_decay_schedule(args.lr, peak_value=args.lr, warmup_steps=args.epochs//10,
+                                                        transition_steps=args.epochs, decay_rate=1e-2, end_value=args.lr/1e+3)
     optim = optax.chain(optax.clip(args.max_norm), optax.adamw(learning_rate=schedule)) 
     opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
 
