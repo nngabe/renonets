@@ -137,7 +137,7 @@ class COSYNN(eqx.Module):
             adj, w = dense_to_coo(A[i])
             z_r = jnp.concatenate([z_r, x], axis=0)
             y_r = jnp.concatenate([y_r, y], axis=0)
-            loss_ent += jnp.abs(S[i]).sum() #jax.scipy.special.entr(S[i]).sum()
+            loss_ent += jax.scipy.special.entr(S[i]).sum()
 
         if inspect:
             return z_r, y_r, loss_ent, S, A
