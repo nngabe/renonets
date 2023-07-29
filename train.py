@@ -93,7 +93,8 @@ if __name__ == '__main__':
     stamp = str(int(time.time()))
     log['loss'] = {}
     x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, seed=0)
-    
+   
+    sched_i = 0, 0 
     for i in range(args.epochs):
         ti = jax.random.randint(prng(i), (10, 1), args.kappa, T - args.tau_max).astype(jnp.float32)
         idx = ti.astype(int)
@@ -101,8 +102,8 @@ if __name__ == '__main__':
         bundles = idx + taus
         yi = x[:,bundles].T
         xi = _batch(x, idx)
-        #sys.exit(0)
-        loss, grad = loss_bundle(model, xi, adj, ti, taus, yi)
+        mode = -1 if i<sched_i[0] else 0
+        loss, grad = loss_bundle(model, xi, adj, ti, taus, yi, key=prng(i), mode=mode)
         grad = jax.tree_map(lambda x: 0. if jnp.isnan(x).any() else x, grad) 
         
         model, opt_state = make_step(grad, model, opt_state, optim)
@@ -118,12 +119,13 @@ if __name__ == '__main__':
             xi = _batch(x, idx)
             
             terms = compute_bundle_terms(model, xi, adj, ti, taus, yi)
-            loss_data, loss_pde, loss_gpde, loss_ent = [term.mean() for term in terms]
-            log['loss'][i] = [loss_data.item(), loss_pde.item(), loss_gpde.item(), loss_ent.item()]
+            loss = [term.mean() for term in terms]
+            log['loss'][i] = [loss[0].item(), loss[1].item(), loss[2].item(), loss[3].item()]
             if args.verbose:
-                print(f'{i:04d}/{args.epochs}: loss_data = {loss_data:.2e}, loss_pde = {loss_pde:.2e}, loss_gpde = {loss_gpde:.2e}, loss_ent = {loss_ent:.2e}  lr = {schedule(i).item():.4e}')
+                print(f'{i:04d}/{args.epochs}: loss_data = {loss[0]:.2e}, loss_pde = {loss[1]:.2e}, loss_gpde = {loss[2]:.2e}, loss_ent = {loss[3]:.2e}  lr = {schedule(i).item():.4e}')
             x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, seed=i)
-            model = eqx.tree_inference(model, value=False)
+            if i<sched_i[1]:
+                model = eqx.tree_inference(model, value=False)
         if i % args.log_freq * 10 == 0:
             utils.save_model(model, log, stamp=stamp)
 

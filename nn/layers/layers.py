@@ -45,7 +45,7 @@ def get_dim_act(args):
         dims = args.pool_dims
         args.pool_dims[-1] = max(args.pool_dims[-1]//args.pool_red, 1)
         args.pool_init -= 1
-        args.use_att = args.use_att_pool
+        #args.use_att = args.use_att_pool
     elif args.embed_init: 
         act = act_dict[args.act_pool] if args.act_pool in act_dict else jax.nn.silu
         dims = args.embed_dims
@@ -81,10 +81,10 @@ class Linear(eqx.Module):
         self.dropout = dropout(p)
 
     def __call__(self, x, key=prng_key):
-        hidden = x @ self.weight.T
-        hidden += self.bias
-        hidden = self.dropout(hidden, key=key)
-        out = self.act(hidden)
+        x = self.dropout(x, key=key)
+        x = x @ self.weight.T
+        x += self.bias
+        out = self.act(x)
         return out
 
 

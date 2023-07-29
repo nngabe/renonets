@@ -5,13 +5,13 @@ from nn.utils.train_utils import add_flags_from_config
 
 config_args = {
     'training_config': {
-        'lr': (1e-4, 'learning rate'),
+        'lr': (5e-5, 'learning rate'),
         'dropout': (0.1, 'dropout probability'),
         'epochs': (14001, 'maximum number of epochs to train for'),
         'weight_decay': (1e-3, 'l2 regularization strength'),
         'optimizer': ('Adam', 'which optimizer to use, can be any of [Adam, RiemannianAdam]'),
         'log_freq': (100, 'how often to compute print train/val metrics (in epochs)'),
-        'max_norm': (1., 'max norm for gradient clipping, or None for no gradient clipping'),
+        'max_norm': (2., 'max norm for gradient clipping, or None for no gradient clipping'),
         'verbose': (True, 'print training data to console'),
         'opt_study': (False, 'whether to run a hyperparameter optimization study or not'),
         'batch_red': (2, 'factor of reduction for batch size'),
@@ -36,7 +36,7 @@ config_args = {
         # which layers use time encodings and what dim should encodings be
         'time_enc': ([0,1,1], 'whether to insert time encoding in encoder, decoder, and pde functions, respectively.'),
         'time_dim': (12, 'dimension of time embedding'), 
-        'x_dim': (4, 'dimension of differentiable coordinates for PDE'),
+        'x_dim': (3, 'dimension of differentiable coordinates for PDE'),
  
         # input/output sizes
         'kappa': (60, 'size of lookback window used as input to encoder'),
@@ -50,12 +50,11 @@ config_args = {
         'pool': ('HGCN', 'which model to compute coarsening matrices'),
 
         # dims of neural nets. -1 will be inferred based on args.skip and args.time_enc. 
-        'k_x_dim': (1, 'width of last encoder dim as multiple of x_dim'),
         'enc_width': (96, 'dimensions of encoder layers'),
         'dec_width': (256,'dimensions of decoder layers'),
         'pde_width': (192, 'dimensions of each pde layers'),
         'enc_depth': (2, 'dimensions of encoder layers'),
-        'dec_depth': (3,'dimensions of decoder layers'),
+        'dec_depth': (4,'dimensions of decoder layers'),
         'pde_depth': (3, 'dimensions of each pde layers'),
         'enc_dims': ([-1,96,-1], 'dimensions of encoder layers'),
         'dec_dims': ([-1,256,256,-1],'dimensions of decoder layers'),
@@ -91,7 +90,7 @@ config_args = {
 
 def set_dims(args):
     args.enc_dims[0] = args.kappa
-    args.enc_dims[-1] = args.x_dim * args.k_x_dim
+    args.enc_dims[-1] = args.enc_width 
     args.dec_dims[-1] = args.x_dim
     args.enc_dims[1:-1] = (args.enc_depth-1) * [args.enc_width]
     args.dec_dims[1:-1] = (args.dec_depth-1) * [args.dec_width]

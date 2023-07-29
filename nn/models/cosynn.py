@@ -97,7 +97,7 @@ class COSYNN(eqx.Module):
 
     def align_pde(self, tx, z, tau, u):
         ttxz = self.align(tx, z, tau)
-        uttxz = jnp.concatenate([u,ttxz],axis=0)
+        uttxz = jnp.concatenate([u*0.,ttxz],axis=0)
         return uttxz
 
     def align_pool(self, z):
@@ -109,16 +109,13 @@ class COSYNN(eqx.Module):
     def embed_pool(self, z, adj, w, i):
         z0 = z[:,:self.kappa]
         zi = z[:,self.kappa:]
-        #zi = self.logmap0(zi)
         zi = self.pool.embed[i](zi, adj, w)
-        zi = self.logmap0(zi)
         z = jnp.concatenate([z0,zi], axis=-1)
-        #z = jnp.einsum('ij,ik -> jk', S, z)
         return z
         
     def decode(self, tx, z, tau, key=prng(0)):
         ttxz = self.align(tx,z,tau)
-        u = self.decoder(ttxz)
+        u = self.decoder(ttxz, key)
         return u, (u, ttxz)
 
     def renorm(self, x, adj, y, inspect=False):
@@ -130,10 +127,10 @@ class COSYNN(eqx.Module):
         y_r = y
         A[0] = jnp.zeros(x.shape[:1]*2).at[adj[0],adj[1]].set(1.)
         for i in self.pool.keys():
-            x = self.align_pool(x)
+            #x = self.align_pool(x)
             z = self.embed_pool(x, adj, w, i)
             s = self.pool[i](x, adj, w)
-            S[i] = jax.nn.softmax(self.logmap0(s) * 20., axis=0)
+            S[i] = jax.nn.softmax(self.logmap0(s) * 100., axis=0)
             x = jnp.einsum('ij,ik -> jk', S[i], z)
             y = jnp.einsum('ij,i -> j', S[i], y)
             A[i+1] = jnp.einsum('ji,jk,kl -> il', S[i], A[i], S[i])
@@ -164,8 +161,8 @@ class COSYNN(eqx.Module):
         grad_t = grad[:,0]
         grad_x = grad[:,1:]
         uttxz = self.align_pde(tx, z, tau, u)
-        F = 1. * jax.nn.sigmoid(self.pde.F(uttxz))
-        v = 0.01 * jax.nn.sigmoid(self.pde.v(uttxz))
+        F = 5. * jax.nn.sigmoid(self.pde.F(uttxz))
+        v = 0.0 * jax.nn.sigmoid(self.pde.v(uttxz))
 
         f0 = grad_t
         f1 = -F * jnp.einsum('j,ij -> i', u, grad_x)
@@ -187,9 +184,10 @@ class COSYNN(eqx.Module):
     def enstrophy(self, grad_x):
         return jax.vmap(jnp.sum)(jnp.abs(grad_x))
 
-    def loss_single(self, x0, adj, t, tau, y, key, test=False):
+    def loss_single(self, x0, adj, t, tau, y, key, mode=0):
         tx,z = self.encode(x0, adj, t)
-        if test:
+        z = self.align_pool(z)
+        if mode==1:
             # compute entropy and align separately from renorm
             _, _, loss_ent = self.renorm(z, adj, y)
             z = self.align_pool(z)
@@ -202,28 +200,35 @@ class COSYNN(eqx.Module):
         f = jnp.sqrt(jnp.square(u).sum(1))
         loss_data = jnp.square(f - y).sum()
         resid, gpde = jax.vmap(self.pde_res_grad)(tx, z, taus, u, grad, lap_x) 
-        loss_pde = jnp.square(resid).sum() #jnp.einsum('i... -> i', jnp.square(resid))
-        loss_gpde = jnp.square(gpde).sum() #jnp.einsum('i... -> i', jnp.square(gpde))
-        if test: 
+        loss_pde = jnp.square(resid).sum() 
+        loss_gpde = jnp.square(gpde).sum() 
+        if mode==1: 
             return loss_data, loss_pde, loss_gpde, loss_ent  
-        else:
+        elif mode==0:
             loss = self.w_data * loss_data + self.w_pde * (loss_pde + self.w_gpde * loss_gpde) + self.w_ent * loss_ent
             return loss
+        elif mode==-1:
+            loss = self.w_data * loss_data + 1e-6 * self.w_pde * (loss_pde + self.w_gpde * loss_gpde) + self.w_ent * loss_ent
+            return loss
+        elif mode==-2:
+            loss = self.w_data * loss_data + 1e-6 * self.w_pde * (loss_pde + self.w_gpde * loss_gpde) + 1e-3 * self.w_ent * loss_ent
+            return loss
+    
 
-    def loss_batch(self, xb, adj, tb, tau, yb, key, test=False):
+    def loss_batch(self, xb, adj, tb, tau, yb, key, mode=0):
         kb = jax.random.split(key,xb.shape[0])
-        sloss = lambda x,t,y,k: self.loss_single(x, adj, t, tau, y, k, test=test)
+        sloss = lambda x,t,y,k: self.loss_single(x, adj, t, tau, y, k, mode=mode)
         res = jax.vmap(sloss)(xb, tb, yb, kb)
-        if test: 
+        if mode==1:
             return res
         else:
             return jnp.mean(res)
 
-    def loss_bundle(self, xb, adj, tb, taus, yb, key, test=False):
+    def loss_bundle(self, xb, adj, tb, taus, yb, key=prng(0), mode=0):
         kb = jax.random.split(key, taus.shape[0])
-        lbatch = lambda tau, y, k: self.loss_batch(xb, adj, tb, tau, y, k, test=test)
+        lbatch = lambda tau, y, k: self.loss_batch(xb, adj, tb, tau, y, k, mode=mode)
         res = jax.vmap(lbatch)(taus,yb,kb)
-        if test:
+        if mode==1:
             return res
         else:
             return jnp.mean(res)
@@ -236,12 +241,12 @@ def _forward(model, x0, t, tau, adj):
 
 @eqx.filter_jit
 @eqx.filter_value_and_grad
-def loss_bundle(model, xb, adj, tb, taus, yb, key=prng(0)):
-    return model.loss_bundle(xb, adj, tb, taus, yb, key)
+def loss_bundle(model, xb, adj, tb, taus, yb, key=prng(0), mode=0):
+    return model.loss_bundle(xb, adj, tb, taus, yb, key, mode=mode)
 
 @eqx.filter_jit
 def compute_bundle_terms(model, xb, adj, tb, taus, yb):
-    terms = model.loss_bundle(xb, adj, tb, taus, yb, test=True)
+    terms = model.loss_bundle(xb, adj, tb, taus, yb, mode=1)
     return terms
 
 # updating model parameters and optimizer state
