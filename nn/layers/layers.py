@@ -67,23 +67,24 @@ def get_dim_act(args):
 
 class Linear(eqx.Module): 
     linear: eqx.nn.Linear
-    weight: jnp.ndarray
-    bias: jnp.ndarray
+    #weight: jnp.ndarray
+    #bias: jnp.ndarray
     act: Callable
     dropout: Callable
     
     def __init__(self, in_features, out_features, p=0., act=jax.nn.silu, key=prng_key):
         super(Linear, self).__init__()
-        self.linear = nn.Linear(in_features, out_features,  key=key)
-        self.weight = jnp.zeros((out_features,in_features))
-        self.bias = 1e-7*jnp.ones((1,out_features))
+        self.linear = eqx.nn.Linear(in_features, out_features,  key=key)
+        #self.weight = jnp.zeros((out_features,in_features))
+        #self.bias = 1e-7*jnp.ones((1,out_features))
         self.act = act
         self.dropout = dropout(p)
 
     def __call__(self, x, key=prng_key):
         x = self.dropout(x, key=key)
-        x = x @ self.weight.T
-        x += self.bias
+        x = self.linear(x)
+        #x = x @ self.weight.T
+        #x += self.bias
         out = self.act(x)
         return out
 

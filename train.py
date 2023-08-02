@@ -36,12 +36,12 @@ if __name__ == '__main__':
     n,T = x.shape
 
     adj = add_self_loops(adj)
-    x_test, adj_test, idx_test = louvain_subgraph(x, adj, batch_size=n//10)
+    x_test, adj_test, idx_test = louvain_subgraph(x, adj, batch_size=min(256,n//10))
     idx_train = jnp.where(jnp.ones(n, dtype=jnp.int32).at[idx_test].set(0))[0]    
     x_train, adj_train, idx_train = subgraph(idx_train, x, adj)
 
-    args.batch_size = sup_power_of_two(n//args.batch_red)
-    args.pool_dims[-1] = sup_power_of_two(2 * n//args.pool_red)
+    args.batch_size = min(256, sup_power_of_two(n//args.batch_red))
+    args.pool_dims[-1] = 256 #sup_power_of_two(2 * n//args.pool_red)
     if args.log_path:
         model, args = utils.read_model(args)
     else:

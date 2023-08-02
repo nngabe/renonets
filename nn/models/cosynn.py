@@ -22,6 +22,7 @@ class COSYNN(eqx.Module):
     w_pde: jnp.float32
     w_gpde: jnp.float32
     w_ent: jnp.float32
+    v_scaler: jnp.float32
     x_dim: int
     t_dim: int
     pool_dims: List[int]
@@ -42,6 +43,7 @@ class COSYNN(eqx.Module):
         self.w_pde = args.w_pde
         self.w_gpde = args.w_gpde
         self.w_ent = args.w_ent
+        self.v_scaler = args.v_scaler
         self.x_dim = args.x_dim
         self.t_dim = args.time_dim
         self.pool_dims = [self.pool.pools[i].layers[-1].linear.bias.shape[0] for i in self.pool.pools]
@@ -147,7 +149,6 @@ class COSYNN(eqx.Module):
     def val_grad(self, tx, z, tau):
         f = lambda tx: self.decode(tx,z,tau)
         grad, val = jax.jacfwd(f, has_aux=True)(tx)
-        grad =  grad[0]
         return grad, (grad, val)
 
     def val_grad_lap(self, tx, z, tau):
@@ -162,7 +163,7 @@ class COSYNN(eqx.Module):
         grad_x = grad[:,1:]
         uttxz = self.align_pde(tx, z, tau, u)
         F = 5. * jax.nn.sigmoid(self.pde.F(uttxz))
-        v = 0.0 * jax.nn.sigmoid(self.pde.v(uttxz))
+        v = self.v_scaler * jax.nn.sigmoid(self.pde.v(uttxz))
 
         f0 = grad_t
         f1 = -F * jnp.einsum('j,ij -> i', u, grad_x)

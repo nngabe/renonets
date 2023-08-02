@@ -46,13 +46,14 @@ class HypLinear(eqx.Module):
     bias: jax.numpy.ndarray
     weight: jax.numpy.ndarray
 
-    def __init__(self, manifold, in_features, out_features, c, p, use_bias):
+    def __init__(self, key, manifold, in_features, out_features, c, p, use_bias):
         super(HypLinear, self).__init__()
         self.dropout = dropout(p) 
         self.manifold = manifold
         self.c = c
-        self.bias = 1e-7*jnp.ones((out_features,1)) 
-        self.weight = jnp.zeros((out_features, in_features))
+        lin = eqx.nn.Linear(in_features, out_features, key=key)
+        self.bias = lin.bias
+        self.weight = lin.weight 
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -87,7 +88,7 @@ class HypAgg(eqx.Module):
         self.c = c
         self.p = p
         self.use_att = use_att
-        self.attn = DenseAtt(in_features, heads=heads)
+        self.attn = DenseAtt(in_features, heads=heads) if use_att else None
 
     def __call__(self, x, adj, w=None):
         s,r = adj[0],adj[1]
@@ -147,9 +148,9 @@ class HGCNLayer(eqx.Module):
     agg: HypAgg
     hyp_act: HypAct
 
-    def __init__(self, manifold, in_features, out_features, c_in, c_out, p, act, use_bias, use_att):
+    def __init__(self, key, manifold, in_features, out_features, c_in, c_out, p, act, use_bias, use_att):
         super(HGCNLayer, self).__init__()
-        self.linear = HypLinear(manifold, in_features, out_features, c_in, p, use_bias)
+        self.linear = HypLinear(key, manifold, in_features, out_features, c_in, p, use_bias)
         self.agg = HypAgg(manifold, c_in, out_features, p, use_att)
         self.hyp_act = HypAct(manifold, c_in, c_out, act)
 

@@ -7,7 +7,7 @@ config_args = {
     'training_config': {
         'lr': (5e-5, 'learning rate'),
         'dropout': (0.1, 'dropout probability'),
-        'epochs': (14001, 'maximum number of epochs to train for'),
+        'epochs': (10001, 'maximum number of epochs to train for'),
         'weight_decay': (1e-3, 'l2 regularization strength'),
         'optimizer': ('Adam', 'which optimizer to use, can be any of [Adam, RiemannianAdam]'),
         'log_freq': (100, 'how often to compute print train/val metrics (in epochs)'),
@@ -25,10 +25,11 @@ config_args = {
         'pool_init': (3, 'flag indicating number of pooling modules which remain to be init-ed.'),
         'embed_init': (3, 'flag indicating number of embedding modules which remain to be init-ed.'), 
         # loss weights
-        'w_data': (1., 'weight for data loss.'),
-        'w_pde': (1., 'weight for pde loss.'),
-        'w_gpde': (1., 'weight for gpde loss.'),
+        'w_data': (10., 'weight for data loss.'),
+        'w_pde': (1e+2, 'weight for pde loss.'),
+        'w_gpde': (1e+7, 'weight for gpde loss.'),
         'w_ent': (1., 'weight for assignment matrix entropy loss.'),
+        'v_scaler': (0., 'max weight of viscous term.'),
         'input_scaler': (1., 'rescaling of input'),
         'rep_scaler': (10., 'rescaling of graph features'),
         'tau_scaler': (10., 'rescaling of tau encoding'),
@@ -40,8 +41,8 @@ config_args = {
  
         # input/output sizes
         'kappa': (60, 'size of lookback window used as input to encoder'),
-        'tau_max': (10, 'maximum steps ahead forecast'),
-        'tau_num': (10, 'number of tau steps for each training bundle'),
+        'tau_max': (60, 'maximum steps ahead forecast'),
+        'tau_num': (8, 'number of tau steps for each training bundle'),
         
         # specify models. pde function layers are the same as the decoder layers by default.
         'encoder': ('HGCN', 'which encoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),

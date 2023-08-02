@@ -97,7 +97,7 @@ class PoincareBall(Manifold):
     def mobius_matvec(self, m, x, c):
         sqrt_c = c ** 0.5
         x_norm = jnp.clip(jnp.linalg.norm(x, axis=-1, keepdims=True, ord=2), a_min=self.min_norm)
-        mx = x @ m.T
+        mx = jnp.einsum('ij,kj -> ik', x, m)
         mx_norm = jnp.clip(jnp.linalg.norm(mx, axis=-1, keepdims=True, ord=2), a_min=self.min_norm)
         res_c = tanh(mx_norm / x_norm * artanh(sqrt_c * x_norm)) * mx / (mx_norm * sqrt_c)
         cond = (mx == 0).prod(-1, keepdims=True, dtype=jnp.uint8)

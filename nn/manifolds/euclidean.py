@@ -49,7 +49,7 @@ class Euclidean(Manifold):
         return x + y
 
     def mobius_matvec(self, m, x, c):
-        mx = x @ m.T
+        mx = jax.numpy.einsum('ij,kj -> ik', x, m)
         return mx
 
     def init_weights(self, w, c, irange=1e-5):

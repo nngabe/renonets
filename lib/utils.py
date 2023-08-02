@@ -32,6 +32,7 @@ def read_model(args):
         #print(args, args_load)
         #args = Namespace(**args) #args_load
         for k in args.__dict__.keys():
+            continue
             if k not in ['lr', 'epochs', 'weight_decay', 'max_norm', 'opt_study', 'w_data', 'w_pde', 'verbose']:
                 setattr(args, k, getattr(args_load,k))
     else:
@@ -40,6 +41,8 @@ def read_model(args):
     #args.enc_init = 1
     #args.dec_init = 1
     #args.pde_init = 2
+    #args.pool_init = 3
+    #args.embed_init = 3
     model = COSYNN(args)
     model = eqx.tree_deserialise_leaves(param_path, model)
     return model, args

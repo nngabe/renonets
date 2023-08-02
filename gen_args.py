@@ -6,13 +6,11 @@ OPTS = []
 
 if batch == '':
     OUT_FILE = 'args/base.txt'
-    opts = {'x_dim': [1,2,3,4,5,6,7,8,9,10], 'epochs': [8001], 'manifold': ['PoincareBall', 'Euclidean'], 'g': ['null', None], 'opt_study': [1]}
+    opts = {'epochs': [14001], 'manifold': ['PoincareBall', 'Euclidean'], 'w_pde':[1e+2], 'w_gpde': [0., 1e+8] , 'path': ['499_k2','993_c1','1792_c1','2489_k1']}
+    #OPTS.append(opts)
 elif batch == 'var':
     OUT_FILE = 'args/var.txt'
-    opts = {'encoder': ['HGCN'], 'x_dim': [2, 4, 8, 16, 24] }
-    OPTS.append(opts)
-    opts = {'encoder': ['HGAT'], 'x_dim': [4, 4, 8, 16, 24] }
-    OPTS.append(opts)
+    opts = {'v_scaler': [1e-0, 1e-1, 1e-2, 1e-3, 1e-4], 'path': ['993_c1']}
 else:
     print('argv[1] not recognized!')
     raise
