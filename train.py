@@ -28,7 +28,9 @@ prng = lambda i=0: jax.random.PRNGKey(i)
 if __name__ == '__main__':
     args = parser.parse_args()
     args.data_path = glob.glob(f'../data_cosynn/gels*{args.path}*')[0]
-    args.adj_path = glob.glob(f'../data_cosynn/adj*{args.path.split("_")[:-1]}*')[0]
+    args.adj_path = glob.glob(f'../data_cosynn/adj*{args.path.split("_")[0]}*')[0]
+    
+    print(f'\n data path: {args.data_path}\n adj path: {args.adj_path}\n\n')
 
     A = pd.read_csv(args.adj_path, index_col=0).to_numpy()
     adj = jnp.array(jnp.where(A))
@@ -97,7 +99,7 @@ if __name__ == '__main__':
     sched_i = args.slaw_iter, args.drop_iter
     print(f'\nSLAW: i>{args.slaw_iter}, dropout: i<{args.drop_iter}\n')
     for i in range(args.epochs):
-        ti = jax.random.randint(prng(i), (12, 1), args.kappa, T - args.tau_max).astype(jnp.float32)
+        ti = jax.random.randint(prng(i), (10, 1), args.kappa, T - args.tau_max).astype(jnp.float32)
         idx = ti.astype(int)
         taus = _taus(i)
         bundles = idx + taus

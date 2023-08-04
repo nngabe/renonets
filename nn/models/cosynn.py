@@ -132,7 +132,7 @@ class COSYNN(eqx.Module):
             #x = self.align_pool(x)
             z = self.embed_pool(x, adj, w, i)
             s = self.pool[i](x, adj, w)
-            S[i] = jax.nn.softmax(self.logmap0(s) * 100., axis=0)
+            S[i] = jax.nn.softmax(self.logmap0(s) * 200., axis=0)
             x = jnp.einsum('ij,ik -> jk', S[i], z)
             y = jnp.einsum('ij,i -> j', S[i], y)
             A[i+1] = jnp.einsum('ji,jk,kl -> il', S[i], A[i], S[i])

@@ -5,7 +5,7 @@ from nn.utils.train_utils import add_flags_from_config
 
 config_args = {
     'training_config': {
-        'lr': (5e-5, 'learning rate'),
+        'lr': (1e-5, 'learning rate'),
         'dropout': (0.04, 'dropout probability'),
         'epochs': (10001, 'maximum number of epochs to train for'),
         'slaw_iter': (100000, 'iteration to start SLAW'),
@@ -44,7 +44,7 @@ config_args = {
         # input/output sizes
         'kappa': (60, 'size of lookback window used as input to encoder'),
         'tau_max': (30, 'maximum steps ahead forecast'),
-        'tau_num': (8, 'number of tau steps for each training bundle'),
+        'tau_num': (5, 'number of tau steps for each training bundle'),
         
         # specify models. pde function layers are the same as the decoder layers by default.
         'encoder': ('HGCN', 'which encoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
