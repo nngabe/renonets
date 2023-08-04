@@ -38,7 +38,7 @@ config_args = {
 
         # which layers use time encodings and what dim should encodings be
         'time_enc': ([0,1,1], 'whether to insert time encoding in encoder, decoder, and pde functions, respectively.'),
-        'time_dim': (12, 'dimension of time embedding'), 
+        'time_dim': (3, 'dimension of time embedding'), 
         'x_dim': (3, 'dimension of differentiable coordinates for PDE'),
  
         # input/output sizes

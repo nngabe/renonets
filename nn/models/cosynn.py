@@ -234,10 +234,14 @@ class COSYNN(eqx.Module):
             return jnp.mean(res)
 
 def _forward(model, x0, t, tau, adj):
-    tx, z = model.encode(x0, adj, t)
-    dec = lambda tx, z: model.decode(tx, z, tau)
-    u = jax.vmap(dec)(tx, z)[0]
-    return jnp.sqrt(jnp.square(u)).sum(2)
+    tx,z = self.encode(x0, adj, t)
+    z = model.align_pool(z)
+    z, y, loss_ent = model.renorm(z, adj, y)
+    tx = tx[0] * jnp.ones((z.shape[0],1))
+    taus = tau * jnp.ones((z.shape[0],1))
+    (u, ttxz), grad, lap_x = jax.vmap(self.val_grad_lap)(tx, z, taus)
+    f = jnp.sqrt(jnp.square(u).sum(1)) 
+    return f, grad_x 
 
 @eqx.filter_jit
 @eqx.filter_value_and_grad
