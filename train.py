@@ -36,7 +36,7 @@ if __name__ == '__main__':
     n,T = x.shape
 
     adj = add_self_loops(adj)
-    x_test, adj_test, idx_test = louvain_subgraph(x, adj, batch_size=min(256,n//10))
+    x_test, adj_test, idx_test = random_subgraph(x, adj, batch_size=min(128,n//10), seed=42)
     idx_train = jnp.where(jnp.ones(n, dtype=jnp.int32).at[idx_test].set(0))[0]    
     x_train, adj_train, idx_train = subgraph(idx_train, x, adj)
 
@@ -94,15 +94,16 @@ if __name__ == '__main__':
     log['loss'] = {}
     x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, seed=0)
    
-    sched_i = 0, 0 
+    sched_i = args.slaw_iter, args.drop_iter
+    print(f'\nSLAW: i>{args.slaw_iter}, dropout: i<{args.drop_iter}\n')
     for i in range(args.epochs):
-        ti = jax.random.randint(prng(i), (10, 1), args.kappa, T - args.tau_max).astype(jnp.float32)
+        ti = jax.random.randint(prng(i), (12, 1), args.kappa, T - args.tau_max).astype(jnp.float32)
         idx = ti.astype(int)
         taus = _taus(i)
         bundles = idx + taus
         yi = x[:,bundles].T
         xi = _batch(x, idx)
-        mode = -1 if i<sched_i[0] else 0
+        mode = -1 if i>args.slaw_iter else 0
         loss, grad = loss_bundle(model, xi, adj, ti, taus, yi, key=prng(i), mode=mode)
         grad = jax.tree_map(lambda x: 0. if jnp.isnan(x).any() else x, grad) 
         

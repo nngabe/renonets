@@ -77,7 +77,7 @@ class MLP(eqx.Module):
             key, subkey = jax.random.split(key)
         self.layers = nn.Sequential(layers)
 
-    def __call__(self, x, key=prng_key):
+    def __call__(self, x, adj=None, w=None, key=prng_key):
         for layer in self.layers:
             x = layer(x, key)
             key = jax.random.split(key)[0]

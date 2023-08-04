@@ -6,12 +6,14 @@ from nn.utils.train_utils import add_flags_from_config
 config_args = {
     'training_config': {
         'lr': (5e-5, 'learning rate'),
-        'dropout': (0.1, 'dropout probability'),
+        'dropout': (0.04, 'dropout probability'),
         'epochs': (10001, 'maximum number of epochs to train for'),
+        'slaw_iter': (100000, 'iteration to start SLAW'),
+        'drop_iter': (0, 'iteration to stop dropout'),
         'weight_decay': (1e-3, 'l2 regularization strength'),
         'optimizer': ('Adam', 'which optimizer to use, can be any of [Adam, RiemannianAdam]'),
-        'log_freq': (100, 'how often to compute print train/val metrics (in epochs)'),
-        'max_norm': (2., 'max norm for gradient clipping, or None for no gradient clipping'),
+        'log_freq': (20, 'how often to compute print train/val metrics (in epochs)'),
+        'max_norm': (1., 'max norm for gradient clipping, or None for no gradient clipping'),
         'verbose': (True, 'print training data to console'),
         'opt_study': (False, 'whether to run a hyperparameter optimization study or not'),
         'batch_red': (2, 'factor of reduction for batch size'),
@@ -25,10 +27,10 @@ config_args = {
         'pool_init': (3, 'flag indicating number of pooling modules which remain to be init-ed.'),
         'embed_init': (3, 'flag indicating number of embedding modules which remain to be init-ed.'), 
         # loss weights
-        'w_data': (10., 'weight for data loss.'),
-        'w_pde': (1e+2, 'weight for pde loss.'),
-        'w_gpde': (1e+7, 'weight for gpde loss.'),
-        'w_ent': (1., 'weight for assignment matrix entropy loss.'),
+        'w_data': (1., 'weight for data loss.'),
+        'w_pde': (10., 'weight for pde loss.'),
+        'w_gpde': (10., 'weight for gpde loss.'),
+        'w_ent': (10., 'weight for assignment matrix entropy loss.'),
         'v_scaler': (0., 'max weight of viscous term.'),
         'input_scaler': (1., 'rescaling of input'),
         'rep_scaler': (10., 'rescaling of graph features'),
@@ -41,7 +43,7 @@ config_args = {
  
         # input/output sizes
         'kappa': (60, 'size of lookback window used as input to encoder'),
-        'tau_max': (60, 'maximum steps ahead forecast'),
+        'tau_max': (30, 'maximum steps ahead forecast'),
         'tau_num': (8, 'number of tau steps for each training bundle'),
         
         # specify models. pde function layers are the same as the decoder layers by default.
@@ -52,14 +54,14 @@ config_args = {
 
         # dims of neural nets. -1 will be inferred based on args.skip and args.time_enc. 
         'enc_width': (96, 'dimensions of encoder layers'),
-        'dec_width': (256,'dimensions of decoder layers'),
-        'pde_width': (192, 'dimensions of each pde layers'),
+        'dec_width': (312,'dimensions of decoder layers'),
+        'pde_width': (312, 'dimensions of each pde layers'),
         'enc_depth': (2, 'dimensions of encoder layers'),
         'dec_depth': (4,'dimensions of decoder layers'),
         'pde_depth': (3, 'dimensions of each pde layers'),
         'enc_dims': ([-1,96,-1], 'dimensions of encoder layers'),
         'dec_dims': ([-1,256,256,-1],'dimensions of decoder layers'),
-        'pde_dims': ([-1,192,192,1], 'dimensions of each pde layers'),
+        'pde_dims': ([-1,256,256,1], 'dimensions of each pde layers'),
         'pool_dims': ([-1,96,-1], 'dimesions of pooling layers.'), 
         'embed_dims': ([-1,96,-1], 'dimensions of embedding layers.'),
         #activations for each network
@@ -91,7 +93,7 @@ config_args = {
 
 def set_dims(args):
     args.enc_dims[0] = args.kappa
-    args.enc_dims[-1] = args.enc_width 
+    args.enc_dims[-1] = args.enc_width//2 
     args.dec_dims[-1] = args.x_dim
     args.enc_dims[1:-1] = (args.enc_depth-1) * [args.enc_width]
     args.dec_dims[1:-1] = (args.dec_depth-1) * [args.dec_width]
@@ -105,9 +107,10 @@ def set_dims(args):
     args.pool_dims[0] = sum(args.enc_dims) - args.x_dim 
     args.embed_dims[0] = sum(args.enc_dims) - args.x_dim - args.kappa 
     args.embed_dims[-1] = args.embed_dims[0]
-
+    
 parser = argparse.ArgumentParser()
 for _, config_dict in config_args.items():
     parser = add_flags_from_config(parser, config_dict)
 args = parser.parse_args()
+args.manifold_pool = args.manifold
 set_dims(args)

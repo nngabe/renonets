@@ -203,18 +203,17 @@ class COSYNN(eqx.Module):
         resid, gpde = jax.vmap(self.pde_res_grad)(tx, z, taus, u, grad, lap_x) 
         loss_pde = jnp.square(resid).sum() 
         loss_gpde = jnp.square(gpde).sum() 
+        loss = jnp.array([loss_data, loss_pde, loss_gpde, loss_ent])
+        w_i = 4./jnp.power(loss,1/2)/(1./jnp.power(loss,1/2)).sum()
+        loss = loss * w_i * (loss.sum())/(loss*w_i).sum()
         if mode==1: 
             return loss_data, loss_pde, loss_gpde, loss_ent  
-        elif mode==0:
-            loss = self.w_data * loss_data + self.w_pde * (loss_pde + self.w_gpde * loss_gpde) + self.w_ent * loss_ent
-            return loss
         elif mode==-1:
-            loss = self.w_data * loss_data + 1e-6 * self.w_pde * (loss_pde + self.w_gpde * loss_gpde) + self.w_ent * loss_ent
+            loss = self.w_data * loss[0] + self.w_pde * loss[1] + self.w_gpde * loss[2] + self.w_ent * loss[3]
             return loss
-        elif mode==-2:
-            loss = self.w_data * loss_data + 1e-6 * self.w_pde * (loss_pde + self.w_gpde * loss_gpde) + 1e-3 * self.w_ent * loss_ent
+        elif mode==0:
+            loss = self.w_data * loss_data + self.w_pde * loss_pde + self.w_gpde * loss_gpde + self.w_ent * loss_ent
             return loss
-    
 
     def loss_batch(self, xb, adj, tb, tau, yb, key, mode=0):
         kb = jax.random.split(key,xb.shape[0])
