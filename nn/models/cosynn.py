@@ -234,7 +234,7 @@ class COSYNN(eqx.Module):
             return jnp.mean(res)
 
 def _forward(model, x0, t, tau, adj):
-    tx,z = self.encode(x0, adj, t)
+    tx,z = model.encode(x0, adj, t)
     z = model.align_pool(z)
     z, y, loss_ent = model.renorm(z, adj, y)
     tx = tx[0] * jnp.ones((z.shape[0],1))
