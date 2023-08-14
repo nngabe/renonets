@@ -7,17 +7,17 @@ config_args = {
     'training_config': {
         'lr': (1e-5, 'learning rate'),
         'dropout': (0.04, 'dropout probability'),
-        'epochs': (10001, 'maximum number of epochs to train for'),
+        'epochs': (20001, 'maximum number of epochs to train for'),
         'slaw_iter': (100000, 'iteration to start SLAW'),
         'drop_iter': (0, 'iteration to stop dropout'),
         'weight_decay': (1e-3, 'l2 regularization strength'),
         'optimizer': ('Adam', 'which optimizer to use, can be any of [Adam, RiemannianAdam]'),
-        'log_freq': (20, 'how often to compute print train/val metrics (in epochs)'),
+        'log_freq': (50, 'how often to compute print train/val metrics (in epochs)'),
         'max_norm': (1., 'max norm for gradient clipping, or None for no gradient clipping'),
         'verbose': (True, 'print training data to console'),
         'opt_study': (False, 'whether to run a hyperparameter optimization study or not'),
         'batch_red': (2, 'factor of reduction for batch size'),
-        'pool_red': (4, 'factor of reduction for each pooling step'),
+        'pool_red': (8, 'factor of reduction for each pooling step'),
     },
     'model_config': {
         # init flags for neural nets
@@ -29,8 +29,8 @@ config_args = {
         # loss weights
         'w_data': (1., 'weight for data loss.'),
         'w_pde': (10., 'weight for pde loss.'),
-        'w_gpde': (10., 'weight for gpde loss.'),
-        'w_ent': (10., 'weight for assignment matrix entropy loss.'),
+        'w_gpde': (1e+5, 'weight for gpde loss.'),
+        'w_ent': (1., 'weight for assignment matrix entropy loss.'),
         'v_scaler': (0., 'max weight of viscous term.'),
         'input_scaler': (1., 'rescaling of input'),
         'rep_scaler': (10., 'rescaling of graph features'),
@@ -44,7 +44,6 @@ config_args = {
         # input/output sizes
         'kappa': (60, 'size of lookback window used as input to encoder'),
         'tau_max': (30, 'maximum steps ahead forecast'),
-        'tau_num': (5, 'number of tau steps for each training bundle'),
         
         # specify models. pde function layers are the same as the decoder layers by default.
         'encoder': ('HGCN', 'which encoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
@@ -53,11 +52,11 @@ config_args = {
         'pool': ('HGCN', 'which model to compute coarsening matrices'),
 
         # dims of neural nets. -1 will be inferred based on args.skip and args.time_enc. 
-        'enc_width': (96, 'dimensions of encoder layers'),
+        'enc_width': (16, 'dimensions of encoder layers'),
         'dec_width': (312,'dimensions of decoder layers'),
         'pde_width': (312, 'dimensions of each pde layers'),
         'enc_depth': (2, 'dimensions of encoder layers'),
-        'dec_depth': (4,'dimensions of decoder layers'),
+        'dec_depth': (3,'dimensions of decoder layers'),
         'pde_depth': (3, 'dimensions of each pde layers'),
         'enc_dims': ([-1,96,-1], 'dimensions of encoder layers'),
         'dec_dims': ([-1,256,256,-1],'dimensions of decoder layers'),
@@ -79,13 +78,14 @@ config_args = {
         
         # graph encoder params
         'n_heads': (4, 'number of attention heads for graph attention networks, must be a divisor dim'),
+        'affine': (True, 'affine transformation in layernorm'),
         'alpha': (0.2, 'alpha for leakyrelu in graph attention networks'),
         'use_att': (0, 'whether to use hyperbolic attention or not'),
         'use_att_pool': (0, 'whether to use hyperbolic attention or not'),
         'local_agg': (0, 'whether to local tangent space aggregation or not')
     },
     'data_config': {
-        'path': ('499_k2', 'snippet from which to infer data path'),
+        'path': ('2982_c1', 'snippet from which to infer data path'),
         'log_path': (None, 'snippet from which to infer log/model path.'),
         'test_prop': (0.1, 'proportion of test nodes for forecasting'),
     }
@@ -93,15 +93,15 @@ config_args = {
 
 def set_dims(args):
     args.enc_dims[0] = args.kappa
-    args.enc_dims[-1] = args.enc_width//2 
+    args.enc_dims[-1] = args.enc_width 
     args.dec_dims[-1] = args.x_dim
     args.enc_dims[1:-1] = (args.enc_depth-1) * [args.enc_width]
     args.dec_dims[1:-1] = (args.dec_depth-1) * [args.dec_width]
     args.pde_dims[1:-1] = (args.pde_depth-1) * [args.pde_width]
     if args.skip: 
-        args.dec_dims[0] = sum(args.enc_dims) + args.time_enc[1] * args.time_dim * 2
+        args.dec_dims[0] = sum(args.enc_dims) + args.time_enc[1] * args.time_dim 
     else: 
-        args.dec_dims[0] = args.enc_dims[-1] + args.time_enc[1] * args.time_dim * 2
+        args.dec_dims[0] = args.enc_dims[-1] + args.time_enc[1] * args.time_dim 
     
     args.pde_dims[0] = args.dec_dims[0] + args.x_dim
     args.pool_dims[0] = sum(args.enc_dims) - args.x_dim 

@@ -1,16 +1,4 @@
---epochs 20001 --manifold PoincareBall --v_scaler 0.0 --w_gpde 0.0 --path 499_k2 
---epochs 20001 --manifold PoincareBall --v_scaler 0.0 --w_gpde 0.0 --path 2982_c1 
---epochs 20001 --manifold PoincareBall --v_scaler 0.0 --w_gpde 100000.0 --path 499_k2 
---epochs 20001 --manifold PoincareBall --v_scaler 0.0 --w_gpde 100000.0 --path 2982_c1 
---epochs 20001 --manifold PoincareBall --v_scaler 0.01 --w_gpde 0.0 --path 499_k2 
---epochs 20001 --manifold PoincareBall --v_scaler 0.01 --w_gpde 0.0 --path 2982_c1 
---epochs 20001 --manifold PoincareBall --v_scaler 0.01 --w_gpde 100000.0 --path 499_k2 
---epochs 20001 --manifold PoincareBall --v_scaler 0.01 --w_gpde 100000.0 --path 2982_c1 
---epochs 20001 --manifold Euclidean --v_scaler 0.0 --w_gpde 0.0 --path 499_k2 
---epochs 20001 --manifold Euclidean --v_scaler 0.0 --w_gpde 0.0 --path 2982_c1 
---epochs 20001 --manifold Euclidean --v_scaler 0.0 --w_gpde 100000.0 --path 499_k2 
---epochs 20001 --manifold Euclidean --v_scaler 0.0 --w_gpde 100000.0 --path 2982_c1 
---epochs 20001 --manifold Euclidean --v_scaler 0.01 --w_gpde 0.0 --path 499_k2 
---epochs 20001 --manifold Euclidean --v_scaler 0.01 --w_gpde 0.0 --path 2982_c1 
---epochs 20001 --manifold Euclidean --v_scaler 0.01 --w_gpde 100000.0 --path 499_k2 
---epochs 20001 --manifold Euclidean --v_scaler 0.01 --w_gpde 100000.0 --path 2982_c1 
+--epochs 20001 --manifold PoincareBall --w_pde 0.0 --w_gpde 0.0 --path 2982_c1 
+--epochs 20001 --manifold PoincareBall --w_pde 10.0 --w_gpde 0.0 --path 2982_c1 
+--epochs 20001 --manifold PoincareBall --w_pde 10.0 --w_gpde 100000.0 --path 2982_c1 
+--epochs 20001 --manifold PoincareBall --v_scaler 0.01 --path 2982_c1 

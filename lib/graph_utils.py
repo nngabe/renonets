@@ -79,15 +79,14 @@ def random_subgraph(
     x: jnp.array,
     adj: jnp.array,
     batch_size: int = 100,
-    seed: int = None, 
+    key: jax.random.PRNGKey = prng(), 
     relabel_nodes: bool = True,
     pad: bool = True,
     pad_size: List[int] = [None,None]
     ):
     """ obtain batch graph by hopping from initial nodes until desired batch_size is obtained.""" 
     num_nodes = jnp.unique(jnp.concatenate(adj)).size
-    _prng = jax.random.PRNGKey(seed) if seed else jax.random.PRNGKey(0)
-    index = jax.random.randint(_prng, (3,), 0, num_nodes) 
+    index = jax.random.randint(key, (3,), 0, num_nodes) 
     node_mask = index_to_mask(index, num_nodes)
     assert num_nodes > batch_size
 
@@ -95,7 +94,7 @@ def random_subgraph(
         if index.size > batch_size:
             break
         edge_mask = node_mask[adj[0]]
-        _adj = jax.random.permutation(_prng, adj[:,edge_mask], axis=1)
+        _adj = jax.random.permutation(key, adj[:,edge_mask], axis=1)
         index = jnp.unique(jnp.concatenate(_adj))
         node_mask = node_mask.at[index].set(True)
     index = index[:batch_size]

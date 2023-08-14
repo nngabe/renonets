@@ -6,8 +6,10 @@ OPTS = []
 
 if batch == '':
     OUT_FILE = 'args/base.txt'
-    opts = {'epochs': [20001], 'manifold': ['PoincareBall', 'Euclidean'], 'v_scaler':[0.,.01], 'w_gpde': [0., 1e+5] , 'path': ['499_k2','2982_c1']}
-    #OPTS.append(opts)
+    opts = {'epochs': [20001], 'manifold': ['PoincareBall'], 'w_pde':[0., 10.], 'w_gpde': [0., 1e+5] , 'path': ['2982_c1']}
+    OPTS.append(opts)
+    opts = {'epochs': [20001], 'manifold': ['PoincareBall'], 'v_scaler':[.01] , 'path': ['2982_c1']}
+    OPTS.append(opts)
 elif batch == 'var':
     OUT_FILE = 'args/var.txt'
     opts = {'v_scaler': [1e-0, 1e-1, 1e-2, 1e-3, 1e-4], 'path': ['993_c1']}

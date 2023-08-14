@@ -1,4 +1,4 @@
-from typing import Any, Optional, Sequence, Tuple, Union, Callable
+from typing import Any, Optional, Sequence, Tuple, Union, Callable, List
 import math
 
 import numpy as np
@@ -45,12 +45,11 @@ def get_dim_act(args):
         dims = args.pool_dims
         args.pool_dims[-1] = max(args.pool_dims[-1]//args.pool_red, 1)
         args.pool_init -= 1
-        #args.use_att = args.use_att_pool
+        args.use_att = args.use_att_pool
     elif args.embed_init: 
         act = act_dict[args.act_pool] if args.act_pool in act_dict else jax.nn.silu
         dims = args.embed_dims
         args.embed_init -= 1
-        args.use_att = 0
     else:
         print('All layers already init-ed! Define additional layers if needed.')
         raise
@@ -64,33 +63,54 @@ def get_dim_act(args):
 
     return dims, act, curvatures
 
+class Attention(eqx.Module):
+    multihead: eqx.nn.MultiheadAttention
+    norm: List[eqx.nn.LayerNorm]
+    ffn: eqx.nn.Sequential
+    dropout: eqx.nn.Dropout
+
+    def __init__(self, in_dim, out_dim, num_heads=4, hidden_dim=None, p=0., affine=True, act=jax.nn.silu, key=prng_key):
+
+        if hidden_dim==None: hidden_dim = 3 * out_dim
+        self.multihead = eqx.nn.MultiheadAttention(num_heads, in_dim, key=key)
+        self.norm = [eqx.nn.LayerNorm(in_dim, use_weight=affine),
+                     eqx.nn.LayerNorm(out_dim, use_weight=affine)]
+        self.ffn = eqx.nn.Sequential([eqx.nn.Linear(in_dim, hidden_dim, key=key),
+                       eqx.nn.Dropout(p),
+                       lambda x,key: act(x),
+                       eqx.nn.Linear(hidden_dim, out_dim, key=key)])
+        self.dropout = eqx.nn.Dropout(p)
+        
+    def __call__(self, x, key=prng_key):
+
+        a = self.multihead(x,x,x)
+        x = x + self.dropout(a, key=key)
+        x = self.norm[0](x)
+
+        y = jax.vmap(self.ffn)(x)
+        x = self.dropout(y, key=key)
+        x = self.norm[1](x)
+        return x
 
 class Linear(eqx.Module): 
     linear: eqx.nn.Linear
-    #weight: jnp.ndarray
-    #bias: jnp.ndarray
     act: Callable
     dropout: Callable
     
     def __init__(self, in_features, out_features, p=0., act=jax.nn.silu, key=prng_key):
         super(Linear, self).__init__()
         self.linear = eqx.nn.Linear(in_features, out_features,  key=key)
-        #self.weight = jnp.zeros((out_features,in_features))
-        #self.bias = 1e-7*jnp.ones((1,out_features))
         self.act = act
         self.dropout = dropout(p)
 
     def __call__(self, x, key=prng_key):
         x = self.dropout(x, key=key)
         x = self.linear(x)
-        #x = x @ self.weight.T
-        #x += self.bias
         out = self.act(x)
         return out
 
 
 class GCNConv(eqx.Module):
-    """GCN layer with symmetric normalization"""
     p: float
     linear: eqx.nn.Linear
     act: Callable
@@ -124,7 +144,6 @@ class GCNConv(eqx.Module):
 
 
 class GATConv(eqx.Module):
-    """GAT  layer."""
     linear: eqx.nn.Linear
     a: eqx.nn.Linear
     W: eqx.nn.Linear

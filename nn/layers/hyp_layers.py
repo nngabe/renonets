@@ -30,12 +30,14 @@ class DenseAtt(eqx.Module):
 
     def __call__(self, x):
         n = x.shape[0]
-        i,j = jnp.where(jnp.ones((n,n)))
+        u1,u2 = jnp.triu_indices(n,1)
+        l1,l2 = jnp.tril_indices(n)
+        i,j = jnp.concatenate([u1,l1]), jnp.concatenate([u2,l2])
 
         x_cat = jnp.concatenate((x[i], x[j]),axis=1)
         attn = jax.vmap(self.mlp)(x_cat).reshape(self.heads,n,n)
         attn = jax.nn.softmax(attn)
-        return att_adj
+        return attn
 
 
 class HypLinear(eqx.Module):
