@@ -58,7 +58,7 @@ def pad_graph(x: jnp.ndarray,
               x_size: int = None, 
               adj_size: int = None) -> Tuple[jnp.ndarray, ...]:
     x_size = sup_power_of_two(x.shape[0]) if not x_size else x_size
-    adj_size = sup_power_of_two(adj.shape[1]) if not adj_size else adj_size
+    adj_size = sup_power_of_two(adj.shape[1]+500) if not adj_size else adj_size
     x_pad = 1e+1*jnp.ones((x_size-x.shape[0], x.shape[1]))
     adj_pad = -1*jnp.ones((adj.shape[0], adj_size-adj.shape[1]), dtype=jnp.int32)
     return jnp.concatenate([x, x_pad], axis=0), jnp.concatenate([adj, adj_pad],axis=1)
@@ -79,14 +79,15 @@ def random_subgraph(
     x: jnp.array,
     adj: jnp.array,
     batch_size: int = 100,
-    key: jax.random.PRNGKey = prng(), 
+    key: jax.random.PRNGKey = prng(),
+    init: jnp.int32 = 5, 
     relabel_nodes: bool = True,
     pad: bool = True,
     pad_size: List[int] = [None,None]
     ):
     """ obtain batch graph by hopping from initial nodes until desired batch_size is obtained.""" 
     num_nodes = jnp.unique(jnp.concatenate(adj)).size
-    index = jax.random.randint(key, (3,), 0, num_nodes) 
+    index = jax.random.randint(key, (5,), 0, num_nodes) 
     node_mask = index_to_mask(index, num_nodes)
     assert num_nodes > batch_size
 

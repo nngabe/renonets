@@ -6,18 +6,19 @@ from nn.utils.train_utils import add_flags_from_config
 config_args = {
     'training_config': {
         'lr': (1e-5, 'learning rate'),
-        'dropout': (0.04, 'dropout probability'),
+        'dropout': (0.1, 'dropout probability'),
         'epochs': (20001, 'maximum number of epochs to train for'),
-        'slaw_iter': (100000, 'iteration to start SLAW'),
-        'drop_iter': (0, 'iteration to stop dropout'),
+        'slaw': (False, 'whether to use scaled loss approximate weighting (SLAW)'),
+        'drop_iter': (100000, 'iteration to stop dropout'),
         'weight_decay': (1e-3, 'l2 regularization strength'),
+        'beta': (0.99, 'moving average coefficient for SLAW'),
         'optimizer': ('Adam', 'which optimizer to use, can be any of [Adam, RiemannianAdam]'),
         'log_freq': (50, 'how often to compute print train/val metrics (in epochs)'),
         'max_norm': (1., 'max norm for gradient clipping, or None for no gradient clipping'),
         'verbose': (True, 'print training data to console'),
         'opt_study': (False, 'whether to run a hyperparameter optimization study or not'),
         'batch_red': (2, 'factor of reduction for batch size'),
-        'pool_red': (8, 'factor of reduction for each pooling step'),
+        'pool_red': (4, 'factor of reduction for each pooling step'),
     },
     'model_config': {
         # init flags for neural nets
@@ -31,19 +32,20 @@ config_args = {
         'w_pde': (10., 'weight for pde loss.'),
         'w_gpde': (1e+5, 'weight for gpde loss.'),
         'w_ent': (1., 'weight for assignment matrix entropy loss.'),
-        'v_scaler': (0., 'max weight of viscous term.'),
+        'F_max': (5., 'max value of convective term'),
+        'v_max': (0., 'max value of viscous term.'),
         'input_scaler': (1., 'rescaling of input'),
         'rep_scaler': (10., 'rescaling of graph features'),
         'tau_scaler': (10., 'rescaling of tau encoding'),
 
         # which layers use time encodings and what dim should encodings be
         'time_enc': ([0,1,1], 'whether to insert time encoding in encoder, decoder, and pde functions, respectively.'),
-        'time_dim': (3, 'dimension of time embedding'), 
+        'time_dim': (1, 'dimension of time embedding'), 
         'x_dim': (3, 'dimension of differentiable coordinates for PDE'),
  
         # input/output sizes
         'kappa': (60, 'size of lookback window used as input to encoder'),
-        'tau_max': (30, 'maximum steps ahead forecast'),
+        'tau_max': (1, 'maximum steps ahead forecast'),
         
         # specify models. pde function layers are the same as the decoder layers by default.
         'encoder': ('HGCN', 'which encoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
@@ -52,12 +54,14 @@ config_args = {
         'pool': ('HGCN', 'which model to compute coarsening matrices'),
 
         # dims of neural nets. -1 will be inferred based on args.skip and args.time_enc. 
-        'enc_width': (16, 'dimensions of encoder layers'),
+        'enc_width': (32, 'dimensions of encoder layers'),
         'dec_width': (312,'dimensions of decoder layers'),
         'pde_width': (312, 'dimensions of each pde layers'),
+        'pool_width': (128, 'dimensions of each pde layers'),
         'enc_depth': (2, 'dimensions of encoder layers'),
         'dec_depth': (3,'dimensions of decoder layers'),
         'pde_depth': (3, 'dimensions of each pde layers'),
+        'pool_depth': (2, 'dimensions of each pooling layer'),
         'enc_dims': ([-1,96,-1], 'dimensions of encoder layers'),
         'dec_dims': ([-1,256,256,-1],'dimensions of decoder layers'),
         'pde_dims': ([-1,256,256,1], 'dimensions of each pde layers'),
@@ -71,7 +75,8 @@ config_args = {
        
         # additional params for layer specification
         'bias': (1, 'whether to use bias in layers or not'),
-        'skip': (1, 'whether to use skip connections or not. set to 0 after encoder init.'),
+        'skip': (1, 'whether to use concat skip connections or not. set to 0 after encoder init.'),
+        'res': (1, 'whether to use sum skip connections or not.'),
         'manifold': ('PoincareBall', 'which manifold to use, can be any of [Euclidean, Hyperboloid, PoincareBall]'),
         'manifold_pool': ('PoincareBall', 'which manifold to use, can be any of [Euclidean, Hyperboloid, PoincareBall]'),
         'c': (1.0, 'hyperbolic radius, set to None for trainable curvature'),
@@ -92,20 +97,32 @@ config_args = {
 }
 
 def set_dims(args):
+    if args.decoder=='MHA': 
+        args.dec_width = args.enc_width 
+        args.dec_depth = 1
+        args.pde_depth = 1
     args.enc_dims[0] = args.kappa
     args.enc_dims[-1] = args.enc_width 
     args.dec_dims[-1] = args.x_dim
     args.enc_dims[1:-1] = (args.enc_depth-1) * [args.enc_width]
     args.dec_dims[1:-1] = (args.dec_depth-1) * [args.dec_width]
     args.pde_dims[1:-1] = (args.pde_depth-1) * [args.pde_width]
-    if args.skip: 
-        args.dec_dims[0] = sum(args.enc_dims) + args.time_enc[1] * args.time_dim 
+    args.pool_dims[1:-1] = (args.pool_depth-1) * [args.pool_width]
+    args.embed_dims[1:-1] = (args.pool_depth-1) * [args.pool_width]
+    if args.res:
+        enc_out = args.enc_dims[-1]
+        args.kappa = 0
+        args.dec_dims[0] = enc_out + args.time_enc[1] * args.time_dim
+    elif args.skip: 
+        enc_out = sum(args.enc_dims)
+        args.dec_dims[0] = enc_out + args.time_enc[1] * args.time_dim 
     else: 
-        args.dec_dims[0] = args.enc_dims[-1] + args.time_enc[1] * args.time_dim 
+        enc_out = args.enc_dims[-1]
+        args.dec_dims[0] = enc_out + args.time_enc[1] * args.time_dim 
     
-    args.pde_dims[0] = args.dec_dims[0] + args.x_dim
-    args.pool_dims[0] = sum(args.enc_dims) - args.x_dim 
-    args.embed_dims[0] = sum(args.enc_dims) - args.x_dim - args.kappa 
+    args.pde_dims[0] = args.dec_dims[0]
+    args.pool_dims[0] = enc_out - args.x_dim 
+    args.embed_dims[0] = enc_out - args.x_dim - args.kappa 
     args.embed_dims[-1] = args.embed_dims[0]
     
 parser = argparse.ArgumentParser()

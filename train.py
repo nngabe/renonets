@@ -15,7 +15,7 @@ import jax.numpy as jnp
 import equinox as eqx
 import optax
 
-from nn.models.cosynn import COSYNN, loss_auto, compute_auto_terms, make_step
+from nn.models.cosynn import COSYNN, loss_scan, loss_terms, make_step
 from config import parser, set_dims
 
 from lib import utils
@@ -30,7 +30,7 @@ if __name__ == '__main__':
     args.data_path = glob.glob(f'../data_cosynn/gels*{args.path}*')[0]
     args.adj_path = glob.glob(f'../data_cosynn/adj*{args.path.split("_")[0]}*')[0]
 
-    if args.slaw_iter<10000:
+    if args.slaw:
         args.w_data = 1.
         args.w_pde =  0.1
         args.w_gpde = 0.01
@@ -41,7 +41,8 @@ if __name__ == '__main__':
     A = pd.read_csv(args.adj_path, index_col=0).to_numpy()
     adj = jnp.array(jnp.where(A))
     x = pd.read_csv(args.data_path, index_col=0).dropna().T
-    x = jnp.array(x.to_numpy())
+    x = x.T.diff().rolling(50,center=True, win_type='gaussian').mean(std=7).dropna().T 
+    x = 1e-2 * jnp.array(x.to_numpy())
     n,T = x.shape
 
     adj = add_self_loops(adj)
@@ -49,7 +50,7 @@ if __name__ == '__main__':
     idx_train = jnp.where(jnp.ones(n, dtype=jnp.int32).at[idx_test].set(0))[0]    
     x_train, adj_train, idx_train = subgraph(idx_train, x, adj)
 
-    args.batch_size = min(256, sup_power_of_two(n//args.batch_red))
+    args.batch_size = min(128, sup_power_of_two(n//args.batch_red))
     args.pool_dims[-1] = 256 #sup_power_of_two(2 * n//args.pool_red)
     if args.log_path:
         model, args = utils.read_model(args)
@@ -83,7 +84,7 @@ if __name__ == '__main__':
         print(f'x[test]  = {x[idx_test].shape},  adj[test]  = {adj_test.shape}')
     
     schedule = optax.warmup_exponential_decay_schedule(0., peak_value=args.lr, warmup_steps=args.epochs//10,
-                                                        transition_steps=args.epochs, decay_rate=1e-2, end_value=args.lr/2e+2)
+                                                        transition_steps=args.epochs, decay_rate=1e-2, end_value=args.lr/2e+1)
     optim = optax.chain(optax.clip(args.max_norm), optax.adamw(learning_rate=schedule)) 
     opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
 
@@ -98,26 +99,30 @@ if __name__ == '__main__':
     log['loss'] = {}
     x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, key=prng(0))
    
-    sched_i = args.slaw_iter, args.drop_iter
-    print(f'\nSLAW: i>{args.slaw_iter}, dropout: i<{args.drop_iter}\n')
+    print(f'\nSLAW: {args.slaw}, dropout: i<{args.drop_iter}\n')
+    
+    n = 5 # number of sample points
+    tic = time.time()
+    mode = -1 if args.slaw else 0
+    
     for i in range(args.epochs):
-        ti = jax.random.randint(prng(i), (10, 1), args.kappa, T - args.tau_max).astype(jnp.float32)
+        ti = jax.random.randint(prng(i), (n, 1), args.kappa, T - args.tau_max).astype(jnp.float32)
         idx = ti.astype(int)
         taus = jnp.arange(1, 1+args.tau_max, 1)
         bundles = idx + taus
         yi = x[:,bundles].T
         yi = jnp.einsum('ijk -> jik', yi)
         xi = _batch(x, idx)
-        mode = -1 if i>args.slaw_iter else 0
-        loss, grad = loss_auto(model, xi, adj, ti, yi, key=prng(i), mode=mode)
+        loss, grad = loss_scan(model, xi, adj, ti, yi, key=prng(i), mode=mode)
         grad = jax.tree_map(lambda x: 0. if jnp.isnan(x).any() else x, grad) 
         
         model, opt_state = make_step(grad, model, opt_state, optim)
         if i % args.log_freq == 0:
+            
             x, adj = x_test, adj_test
             model = eqx.tree_inference(model, value=True) 
 
-            ti = jnp.linspace(args.kappa, T - args.tau_max , 100).reshape(-1,1)
+            ti = jnp.linspace(args.kappa, T - args.tau_max , 2*n).reshape(-1,1)
             idx = ti.astype(int)
             taus = jnp.arange(1, 1+args.tau_max, 1).astype(int)
             bundles = idx + taus
@@ -125,15 +130,20 @@ if __name__ == '__main__':
             yi = jnp.einsum('ijk -> jik', yi)
             xi = _batch(x, idx)
             
-            terms = compute_auto_terms(model, xi, adj, ti, yi)
+            terms = loss_terms(model, xi, adj, ti, yi)
             loss = [term.mean() for term in terms]
             log['loss'][i] = [loss[0].item(), loss[1].item(), loss[2].item(), loss[3].item()]
             if args.verbose:
-                print(f'{i:04d}/{args.epochs}: loss_data = {loss[0]:.2e}, loss_pde = {loss[1]:.2e}, loss_gpde = {loss[2]:.2e}, loss_ent = {loss[3]:.2e}  lr = {schedule(i).item():.4e}')
-            x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, key=prng(i))
-            if i<sched_i[1]:
+                print(f'{i:04d}/{args.epochs}: loss_data = {loss[0]:.2e}, loss_pde = {loss[1]:.2e}, loss_gpde = {loss[2]:.2e}, loss_ent = {loss[3]:.2e}  lr = {schedule(i).item():.4e} (time: {time.time()-tic:.1f} s)')
+            tic = time.time()
+            bsize,l = 0,0
+            while bsize < args.batch_size:
+                x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, key=prng(i+l))
+                l += 1
+                bsize = x.shape[0]
+            if i<args.drop_iter:
                 model = eqx.tree_inference(model, value=False)
-        if i % args.log_freq * 10 == 0:
+        if i % args.log_freq * 100 == 0:
             utils.save_model(model, log, stamp=stamp)
 
     log['wall_time'] = int(time.time()) - int(stamp) 

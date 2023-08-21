@@ -40,6 +40,7 @@ def get_dim_act(args):
         dims = args.pde_dims
         args.pde_init -= 1
     elif args.pool_init:
+        args.res = 1
         act = act_dict[args.act_pool] if args.act_pool in act_dict else jax.nn.silu
         args.num_layers = len(args.pool_dims)
         dims = args.pool_dims

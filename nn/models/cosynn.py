@@ -2,6 +2,7 @@ from typing import Any, Optional, Sequence, Tuple, Union, Dict, List
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import equinox as eqx
 
 from nn import manifolds
@@ -22,7 +23,8 @@ class COSYNN(eqx.Module):
     w_pde: jnp.float32
     w_gpde: jnp.float32
     w_ent: jnp.float32
-    v_scaler: jnp.float32
+    F_max: jnp.float32
+    v_max: jnp.float32
     x_dim: int
     t_dim: int
     pool_dims: List[int]
@@ -30,9 +32,11 @@ class COSYNN(eqx.Module):
     scalers: Dict[str, jnp.ndarray]
     k_lin: Tuple[int,int]
     k_log: Tuple[int,int]
+    beta: np.float32
 
     def __init__(self, args):
         super(COSYNN, self).__init__()
+        self.kappa = 0 if args.res else args.kappa
         self.encoder = getattr(models, args.encoder)(args)
         self.decoder = getattr(models, args.decoder)(args)
         self.pde = aux.neural_burgers(args)
@@ -43,11 +47,11 @@ class COSYNN(eqx.Module):
         self.w_pde = args.w_pde
         self.w_gpde = args.w_gpde
         self.w_ent = args.w_ent
-        self.v_scaler = args.v_scaler
+        self.F_max = args.F_max
+        self.v_max = args.v_max
         self.x_dim = args.x_dim
         self.t_dim = args.time_dim
         self.pool_dims = [self.pool.pools[i].layers[-1].linear.bias.shape[0] for i in self.pool.pools]
-        self.kappa = args.kappa
         self.scalers = {'t_lin': 10. ** jnp.arange(2, 2*self.t_dim, 1, dtype=jnp.float32),
                         't_log': 10. ** jnp.arange(-2, 2*self.t_dim, 1, dtype=jnp.float32),
                         't_cos': 10. **jnp.arange(-4,2*self.t_dim, 1, dtype=jnp.float32),
@@ -57,8 +61,11 @@ class COSYNN(eqx.Module):
                        }
         self.k_lin = self.t_dim//2
         self.k_log = self.t_dim - self.k_lin
- 
+        self.beta = args.beta 
+
     def time_encode(self, t):
+        if self.t_dim==1: 
+            return jnp.log( t * 100. + 1. )
         t_lin = t / jnp.clip(self.scalers['t_lin'], 1e-7)
         t_log = t / jnp.clip(self.scalers['t_log'], 1e-7)
         t_cos = t / jnp.clip(self.scalers['t_cos'], 1e-7)
@@ -68,22 +75,18 @@ class COSYNN(eqx.Module):
         t = jnp.concatenate([t_lin, t_log])
         return t
 
-    def project(self, x):
+    def exp(self, x):
         x = self.manifold.proj_tan0(x, c=self.c)
         x = self.manifold.expmap0(x, c=self.c)
         x = self.manifold.proj(x, c=self.c)
         return x
-        
-    def logmap0(self, y):
-        return self.manifold.logmap0(y, self.c)
-   
-    def mask(self, x):
-        mask0 =  jnp.abs(x[:,0]-10.) > 1e-7
-        mask = jnp.concatenate([mask0, jnp.ones(sum(self.pool_dims), dtype=bool)],axis=0)
-        return mask0
 
+    def log(self, y):
+        y = self.manifold.logmap0(y, self.c)
+        y = y * jnp.sqrt(self.c) * 1.4763057
+        return y
+  
     def encode(self, x0, adj, t, eps=0.):
-        #x0 = self.delta(x0) #*= self.scalers['input'][0]
         z_x = self.encoder(x0, adj)
         z = z_x[:,:-self.x_dim]
         x = eps * z_x[:,-self.x_dim:]
@@ -102,18 +105,19 @@ class COSYNN(eqx.Module):
     def align_pde(self, tx, z, u):
         txz = self.align(tx, z)
         utxz = jnp.concatenate([u*0.,txz],axis=0)
-        return utxz
+        return txz
 
     def align_pool(self, z):
         z0 = z[:,:self.kappa]
         zi = z[:,self.kappa:]
-        zi = self.logmap0(zi)
+        zi = self.log(zi)
         return jnp.concatenate([z0,zi], axis=-1)
 
     def embed_pool(self, z, adj, w, i):
         z0 = z[:,:self.kappa]
         zi = z[:,self.kappa:]
-        zi = self.pool.embed[i](zi, adj, w)
+        ze = self.pool.embed[i](zi, adj, w)
+        zi = self.manifold.mobius_add(zi,ze, self.c)
         s = self.pool[i](z, adj, w)
         z = jnp.concatenate([z0,zi], axis=-1)
         return z,s
@@ -121,16 +125,10 @@ class COSYNN(eqx.Module):
     def delta(self, z):
         f = z
         i = self.kappa
-        #du = (3 * f[0:i-4] - 16 * f[1:i-3] + 36 * f[2:i-2] - 48 * f[3:i-1] + 25* f[4:i+0]) / 12.
-        #du = z[1:self.kappa] - z[0:self.kappa-1] # shape 60-1
-        #d2u = 2. * z[3:self.kappa] - 5. * z[2:self.kappa-1] + 4. * z[1:self.kappa-2] - 1. * z[0:self.kappa-3] # shape 60-4 
-        #d2u *= .01
-        
-        #z = jnp.concatenate([d2u[-29:],du[-30:],z[59:60],z[self.kappa:]])
         return z
     
     def decode(self, tx, z, key=prng(0)):
-        z = self.delta(z) #jnp.concatenate([d2u[-30:],du[-30:],z[self.kappa:]])
+        z = self.delta(z) 
         txz = self.align(tx,z)
         u = self.decoder(txz, key=key)
         return u, (u, txz)
@@ -145,7 +143,7 @@ class COSYNN(eqx.Module):
         A[0] = jnp.zeros(x.shape[:1]*2).at[adj[0],adj[1]].set(1.)
         for i in self.pool.keys():
             z,s = self.embed_pool(x, adj, w, i)
-            S[i] = jax.nn.softmax(self.logmap0(s) * 200., axis=0)
+            S[i] = jax.nn.softmax(self.log(s) * 200., axis=0)
             x = jnp.einsum('ij,ik -> jk', S[i], z)
             y = jnp.einsum('ij,ki -> kj', S[i], y)
             A[i+1] = jnp.einsum('ji,jk,kl -> il', S[i], A[i], S[i])
@@ -175,8 +173,8 @@ class COSYNN(eqx.Module):
         grad_t = grad[:,0]
         grad_x = grad[:,1:]
         utxz = self.align_pde(tx, z, u)
-        F = 5. * jax.nn.sigmoid(self.pde.F(utxz))
-        v = self.v_scaler * 1. * jax.nn.sigmoid(self.pde.v(utxz))
+        F = self.F_max * jax.nn.sigmoid(self.pde.F(utxz))
+        v = self.v_max * 1. * jax.nn.sigmoid(self.pde.v(utxz))
 
         f0 = grad_t
         f1 = -F * jnp.einsum('j,ij -> i', u, grad_x)
@@ -204,7 +202,6 @@ class COSYNN(eqx.Module):
         if mode==1:
             # compute entropy and align separately from renorm
             _, _, loss_ent = self.renorm(z, adj, y)
-            z = self.align_pool(z)
         else: 
             # renorm z and y only in training loop  
             z, y, loss_ent = self.renorm(z, adj, y)
@@ -222,18 +219,14 @@ class COSYNN(eqx.Module):
             z = z.at[:,:self.kappa].set(x)
 
         if mode==1: #reporting
-            return loss_data, loss_pde, loss_gpde, loss_ent
+            return jnp.array([loss_data, loss_pde, loss_gpde, loss_ent])
         elif mode==-1: #slaw
-            loss = jnp.array([loss_data, loss_pde, loss_gpde, loss_ent])
-            w_i = 4. / loss / (1./loss).sum()
-            loss = loss * w_i * (loss.sum())/(loss*w_i).sum()
-            loss = self.w_data * loss[0] + self.w_pde * loss[1] + self.w_gpde * loss[2] + self.w_ent * loss[3]
-            return loss
+            return jnp.array([loss_data, loss_pde, loss_gpde, loss_ent])
         elif mode==0: #default
             loss = self.w_data * loss_data + self.w_pde * loss_pde + self.w_gpde * loss_gpde + self.w_ent * loss_ent
             return loss
        
-    def loss_auto(self, xb, adj, tb, yb, key=prng(0), mode=0):
+    def loss_vmap(self, xb, adj, tb, yb, key=prng(0), mode=0):
         kb = jax.random.split(key,xb.shape[0]) 
         sloss = lambda x,t,y,k: self.loss_single_auto(x, adj, t, y, k, mode=mode)
         res = jax.vmap(sloss)(xb, tb, yb, kb)
@@ -241,6 +234,29 @@ class COSYNN(eqx.Module):
             return res
         else:
             return jnp.mean(res)
+
+    def loss_scan(self, xb, adj, tb, yb, key=prng(0), mode=0, state=None):
+        n = xb.shape[0] # batch size
+        kb = jax.random.split(key,n) 
+        body_fun = lambda i,val: val + self.loss_single_auto(xb[i], adj, tb[i], yb[i], kb[i], mode=mode)
+        loss = 0. if mode==0 else jnp.zeros(4)
+        loss = jax.lax.fori_loop(0, n, body_fun, loss)
+        if mode==1:
+            return loss/n
+        elif mode==-1:
+            assert state != None
+            a,b = state['a'], state['b']
+            loss = loss/n
+            a = self.beta * a + (1. - self.beta) * loss**2
+            b = self.beta * b + (1. - self.beta) * loss
+            s = jnp.sqrt(a - b**2)
+            w = loss.shape[0] / s / (1./s).sum()
+            loss = w * loss
+            loss = self.w_data * loss[0] + self.w_pde * loss[1] + self.w_gpde * loss[2] + self.w_ent * loss[3] 
+            state['a'], state['b'] = a,b
+            return loss.sum(), state
+        elif mode==0:
+            return loss/n
 
 def _forward(model, x0, t, tau, adj):
     tx,z = model.encode(x0, adj, t)
@@ -254,22 +270,12 @@ def _forward(model, x0, t, tau, adj):
 
 @eqx.filter_jit
 @eqx.filter_value_and_grad
-def loss_auto(model, xb, adj, tb, yb, key=prng(0), mode=0):
-    return model.loss_auto(xb, adj, tb, yb, key, mode)
+def loss_scan(model, xb, adj, tb, yb, key=prng(0), mode=0):
+    return model.loss_scan(xb, adj, tb, yb, key, mode)
 
 @eqx.filter_jit
-@eqx.filter_value_and_grad
-def loss_bundle(model, xb, adj, tb, taus, yb, key=prng(0), mode=0):
-    return model.loss_bundle(xb, adj, tb, taus, yb, key, mode=mode)
-
-@eqx.filter_jit
-def compute_bundle_terms(model, xb, adj, tb, taus, yb):
-    terms = model.loss_bundle(xb, adj, tb, taus, yb, mode=1)
-    return terms
-
-@eqx.filter_jit
-def compute_auto_terms(model, xb, adj, tb, yb):
-    return model.loss_auto(xb, adj, tb, yb, mode=1)
+def loss_terms(model, xb, adj, tb, yb):
+    return model.loss_scan(xb, adj, tb, yb, mode=1)
 
 # updating model parameters and optimizer state
 @eqx.filter_jit
