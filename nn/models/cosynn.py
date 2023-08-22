@@ -218,32 +218,20 @@ class COSYNN(eqx.Module):
             x = jnp.concatenate([z[:,1:self.kappa],f.reshape(-1,1)], axis=-1)
             z = z.at[:,:self.kappa].set(x)
 
-        if mode==1: #reporting
+        if mode==-1: #reporting
             return jnp.array([loss_data, loss_pde, loss_gpde, loss_ent])
-        elif mode==-1: #slaw
+        elif mode==1: #slaw
             return jnp.array([loss_data, loss_pde, loss_gpde, loss_ent])
         elif mode==0: #default
             loss = self.w_data * loss_data + self.w_pde * loss_pde + self.w_gpde * loss_gpde + self.w_ent * loss_ent
             return loss
        
-    def loss_vmap(self, xb, adj, tb, yb, key=prng(0), mode=0):
-        kb = jax.random.split(key,xb.shape[0]) 
-        sloss = lambda x,t,y,k: self.loss_single_auto(x, adj, t, y, k, mode=mode)
-        res = jax.vmap(sloss)(xb, tb, yb, kb)
+    def loss_vmap(self, xb, adj, tb, yb, key=prng(0), mode=0, state=None):
+        n = xb.shape[0]
+        kb = jax.random.split(key, n) 
+        loss_vec = lambda x,t,y,k: self.loss_single_auto(x, adj, t, y, k, mode=mode)
+        loss = jax.vmap(loss_vec)(xb, tb, yb, kb)
         if mode==1:
-            return res
-        else:
-            return jnp.mean(res)
-
-    def loss_scan(self, xb, adj, tb, yb, key=prng(0), mode=0, state=None):
-        n = xb.shape[0] # batch size
-        kb = jax.random.split(key,n) 
-        body_fun = lambda i,val: val + self.loss_single_auto(xb[i], adj, tb[i], yb[i], kb[i], mode=mode)
-        loss = 0. if mode==0 else jnp.zeros(4)
-        loss = jax.lax.fori_loop(0, n, body_fun, loss)
-        if mode==1:
-            return loss/n
-        elif mode==-1:
             assert state != None
             a,b = state['a'], state['b']
             loss = loss/n
@@ -255,8 +243,29 @@ class COSYNN(eqx.Module):
             loss = self.w_data * loss[0] + self.w_pde * loss[1] + self.w_gpde * loss[2] + self.w_ent * loss[3] 
             state['a'], state['b'] = a,b
             return loss.sum(), state
-        elif mode==0:
-            return loss/n
+        else:
+            return loss/n, state
+
+    def loss_scan(self, xb, adj, tb, yb, key=prng(0), mode=0, state=None):
+        n = xb.shape[0] # batch size
+        kb = jax.random.split(key,n) 
+        body_fun = lambda i,val: val + self.loss_single_auto(xb[i], adj, tb[i], yb[i], kb[i], mode=mode)
+        loss = 0. if mode==0 else jnp.zeros(4)
+        loss = jax.lax.fori_loop(0, n, body_fun, loss)
+        if mode==1:
+            assert state != None
+            a,b = state['a'], state['b']
+            loss = loss/n
+            a = self.beta * a + (1. - self.beta) * loss**2
+            b = self.beta * b + (1. - self.beta) * loss
+            s = jnp.sqrt(a - b**2)
+            w = loss.shape[0] / s / (1./s).sum()
+            loss = w * loss
+            loss = self.w_data * loss[0] + self.w_pde * loss[1] + self.w_gpde * loss[2] + self.w_ent * loss[3] 
+            state['a'], state['b'] = a,b
+            return loss.sum(), state
+        else:
+            return loss/n, state
 
 def _forward(model, x0, t, tau, adj):
     tx,z = model.encode(x0, adj, t)
@@ -269,13 +278,13 @@ def _forward(model, x0, t, tau, adj):
     return f, grad_x 
 
 @eqx.filter_jit
-@eqx.filter_value_and_grad
-def loss_scan(model, xb, adj, tb, yb, key=prng(0), mode=0):
-    return model.loss_scan(xb, adj, tb, yb, key, mode)
+@eqx.filter_value_and_grad(has_aux=True)
+def loss_scan(model, xb, adj, tb, yb, key=prng(0), mode=0, state=None):
+    return model.loss_scan(xb, adj, tb, yb, key=key, mode=mode, state=state)
 
 @eqx.filter_jit
 def loss_terms(model, xb, adj, tb, yb):
-    return model.loss_scan(xb, adj, tb, yb, mode=1)
+    return model.loss_scan(xb, adj, tb, yb, mode=-1)
 
 # updating model parameters and optimizer state
 @eqx.filter_jit

@@ -7,16 +7,16 @@ config_args = {
     'training_config': {
         'lr': (1e-5, 'learning rate'),
         'dropout': (0.1, 'dropout probability'),
-        'epochs': (20001, 'maximum number of epochs to train for'),
+        'epochs': (20001, 'number of epochs to train for'),
         'slaw': (False, 'whether to use scaled loss approximate weighting (SLAW)'),
         'drop_iter': (100000, 'iteration to stop dropout'),
         'weight_decay': (1e-3, 'l2 regularization strength'),
         'beta': (0.99, 'moving average coefficient for SLAW'),
-        'optimizer': ('Adam', 'which optimizer to use, can be any of [Adam, RiemannianAdam]'),
         'log_freq': (50, 'how often to compute print train/val metrics (in epochs)'),
-        'max_norm': (1., 'max norm for gradient clipping, or None for no gradient clipping'),
+        'max_norm': (0.5, 'max norm for gradient clipping, or None for no gradient clipping'),
         'verbose': (True, 'print training data to console'),
         'opt_study': (False, 'whether to run a hyperparameter optimization study or not'),
+        'num_col': (3, 'number of colocation points in the time domain'),
         'batch_red': (2, 'factor of reduction for batch size'),
         'pool_red': (4, 'factor of reduction for each pooling step'),
     },
@@ -44,17 +44,17 @@ config_args = {
         'x_dim': (3, 'dimension of differentiable coordinates for PDE'),
  
         # input/output sizes
-        'kappa': (60, 'size of lookback window used as input to encoder'),
+        'kappa': (64, 'size of lookback window used as input to encoder'),
         'tau_max': (1, 'maximum steps ahead forecast'),
         
         # specify models. pde function layers are the same as the decoder layers by default.
-        'encoder': ('HGCN', 'which encoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
-        'decoder': ('MLP', 'which decoder to use, can be any of [MLP, HNN, GCN, GAT, HGCN]'),
+        'encoder': ('HGCN', 'which encoder to use'),
+        'decoder': ('MLP', 'which decoder to use'),
         'pde': ('neural_burgers', 'which PDE to use for the PINN loss'),
         'pool': ('HGCN', 'which model to compute coarsening matrices'),
 
         # dims of neural nets. -1 will be inferred based on args.skip and args.time_enc. 
-        'enc_width': (32, 'dimensions of encoder layers'),
+        'enc_width': (28, 'dimensions of encoder layers'),
         'dec_width': (312,'dimensions of decoder layers'),
         'pde_width': (312, 'dimensions of each pde layers'),
         'pool_width': (128, 'dimensions of each pde layers'),
@@ -68,10 +68,10 @@ config_args = {
         'pool_dims': ([-1,96,-1], 'dimesions of pooling layers.'), 
         'embed_dims': ([-1,96,-1], 'dimensions of embedding layers.'),
         #activations for each network
-        'act_enc': ('silu', 'which activation function to use (or None for no activation)'),
-        'act_dec': ('silu', 'which activation function to use (or None for no activation)'),
-        'act_pde': ('silu', 'which activation function to use (or None for no activation)'),
-        'act_pool': ('silu', 'which activation function to use (or None for no activation)'),
+        'act_enc': ('gelu', 'which activation function to use (or None for no activation)'),
+        'act_dec': ('gelu', 'which activation function to use (or None for no activation)'),
+        'act_pde': ('gelu', 'which activation function to use (or None for no activation)'),
+        'act_pool': ('gelu', 'which activation function to use (or None for no activation)'),
        
         # additional params for layer specification
         'bias': (1, 'whether to use bias in layers or not'),

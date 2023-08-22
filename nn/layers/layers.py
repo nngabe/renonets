@@ -15,7 +15,7 @@ from equinox.nn import Dropout as dropout
 import jraph
 
 prng_key = jax.random.PRNGKey(0)
-act_dict = {'relu': jax.nn.relu, 'silu': jax.nn.silu, 'lrelu': jax.nn.leaky_relu}
+act_dict = {'relu': jax.nn.relu, 'silu': jax.nn.silu, 'lrelu': jax.nn.leaky_relu, 'gelu': jax.nn.gelu}
 
 def get_dim_act(args):
     """
@@ -24,31 +24,31 @@ def get_dim_act(args):
     :return:
     """
     if args.enc_init:
-        act = act_dict[args.act_enc] if args.act_enc in act_dict else jax.nn.silu
+        act = act_dict[args.act_enc] 
         args.num_layers = len(args.enc_dims)
         dims = args.enc_dims
         args.enc_init = 0
         args.skip = 0
     elif args.dec_init:
-        act = act_dict[args.act_dec] if args.act_dec in act_dict else jax.nn.silu
+        act = act_dict[args.act_dec] 
         args.num_layers = len(args.dec_dims)
         dims = args.dec_dims
         args.dec_init = 0
     elif args.pde_init:
-        act = act_dict[args.act_pde] if args.act_pde in act_dict else jax.nn.silu
+        act = act_dict[args.act_pde] 
         args.num_layers = len(args.pde_dims)
         dims = args.pde_dims
         args.pde_init -= 1
     elif args.pool_init:
         args.res = 1
-        act = act_dict[args.act_pool] if args.act_pool in act_dict else jax.nn.silu
+        act = act_dict[args.act_pool] 
         args.num_layers = len(args.pool_dims)
         dims = args.pool_dims
         args.pool_dims[-1] = max(args.pool_dims[-1]//args.pool_red, 1)
         args.pool_init -= 1
         args.use_att = args.use_att_pool
     elif args.embed_init: 
-        act = act_dict[args.act_pool] if args.act_pool in act_dict else jax.nn.silu
+        act = act_dict[args.act_pool] 
         dims = args.embed_dims
         args.embed_init -= 1
     else:

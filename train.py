@@ -51,7 +51,7 @@ if __name__ == '__main__':
     x_train, adj_train, idx_train = subgraph(idx_train, x, adj)
 
     args.batch_size = min(128, sup_power_of_two(n//args.batch_red))
-    args.pool_dims[-1] = 256 #sup_power_of_two(2 * n//args.pool_red)
+    args.pool_dims[-1] = 128 #sup_power_of_two(2 * n//args.pool_red)
     if args.log_path:
         model, args = utils.read_model(args)
     else:
@@ -101,11 +101,13 @@ if __name__ == '__main__':
    
     print(f'\nSLAW: {args.slaw}, dropout: i<{args.drop_iter}\n')
     
-    n = 5 # number of sample points
+    n = args.num_col # number of temporal colocation points
     tic = time.time()
-    mode = -1 if args.slaw else 0
-    
+    mode = 1 if args.slaw else 0
+    state = {'a':0.,'b':0.} if args.slaw else None
+    key = prng(0)
     for i in range(args.epochs):
+        key = jax.random.split(key)[0]
         ti = jax.random.randint(prng(i), (n, 1), args.kappa, T - args.tau_max).astype(jnp.float32)
         idx = ti.astype(int)
         taus = jnp.arange(1, 1+args.tau_max, 1)
@@ -113,7 +115,7 @@ if __name__ == '__main__':
         yi = x[:,bundles].T
         yi = jnp.einsum('ijk -> jik', yi)
         xi = _batch(x, idx)
-        loss, grad = loss_scan(model, xi, adj, ti, yi, key=prng(i), mode=mode)
+        (loss, state), grad = loss_scan(model, xi, adj, ti, yi, key=key, mode=mode, state=state)
         grad = jax.tree_map(lambda x: 0. if jnp.isnan(x).any() else x, grad) 
         
         model, opt_state = make_step(grad, model, opt_state, optim)
@@ -122,7 +124,7 @@ if __name__ == '__main__':
             x, adj = x_test, adj_test
             model = eqx.tree_inference(model, value=True) 
 
-            ti = jnp.linspace(args.kappa, T - args.tau_max , 2*n).reshape(-1,1)
+            ti = jnp.linspace(args.kappa, T - args.tau_max , 10).reshape(-1,1)
             idx = ti.astype(int)
             taus = jnp.arange(1, 1+args.tau_max, 1).astype(int)
             bundles = idx + taus
@@ -130,19 +132,18 @@ if __name__ == '__main__':
             yi = jnp.einsum('ijk -> jik', yi)
             xi = _batch(x, idx)
             
-            terms = loss_terms(model, xi, adj, ti, yi)
+            terms, _ = loss_terms(model, xi, adj, ti, yi)
             loss = [term.mean() for term in terms]
             log['loss'][i] = [loss[0].item(), loss[1].item(), loss[2].item(), loss[3].item()]
+            
             if args.verbose:
                 print(f'{i:04d}/{args.epochs}: loss_data = {loss[0]:.2e}, loss_pde = {loss[1]:.2e}, loss_gpde = {loss[2]:.2e}, loss_ent = {loss[3]:.2e}  lr = {schedule(i).item():.4e} (time: {time.time()-tic:.1f} s)')
             tic = time.time()
-            bsize,l = 0,0
-            while bsize < args.batch_size:
-                x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, key=prng(i+l))
-                l += 1
-                bsize = x.shape[0]
+            x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, key=prng(i))
+            
             if i<args.drop_iter:
                 model = eqx.tree_inference(model, value=False)
+        
         if i % args.log_freq * 100 == 0:
             utils.save_model(model, log, stamp=stamp)
 

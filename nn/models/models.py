@@ -21,7 +21,7 @@ class null(eqx.Module):
     def __call__(self, x=None, adj=None):
         return 0.
 
-class Model(eqx.Module):
+class GraphNet(eqx.Module):
     c: float
     skip: bool
     layers: eqx.nn.Sequential
@@ -31,7 +31,7 @@ class Model(eqx.Module):
     manifold: Optional[manifolds.base.Manifold] = None
 
     def __init__(self, args):
-        super(Model, self).__init__()
+        super(GraphNet, self).__init__()
         self.c = args.c
         self.skip = args.skip
         self.res = args.res
@@ -93,7 +93,7 @@ class MHA(eqx.Module):
             in_dim, out_dim = dims[i], dims[i + 1]
             layers.append(MultiheadBlock(in_dim, out_dim, p=args.dropout, key=subkey))
             key= jax.random.split(key)[0]
-        self.layers = layers #nn.Sequential(layers)
+        self.layers = layers 
         self.encode_graph = False
     def __call__(self, x, adj=None, w=None, key=prng_key):
         for layer in self.layers:
@@ -111,22 +111,20 @@ class MultiheadBlock(eqx.Module):
     dropout: eqx.nn.Dropout
     omega: np.ndarray
 
-    def __init__(self, in_dim, out_dim, n_heads=2, p=0.1, affine=True, key=prng_key):
+    def __init__(self, in_dim, out_dim, hidden_dim=256, n_heads=2, p=0.1, affine=True, key=prng_key):
         super(MultiheadBlock, self).__init__()
         key = jax.random.split(jax.random.PRNGKey(0),10)
         self.dropout = eqx.nn.Dropout(p)
-        hidden_dim = 256
         embed_dim = 32
         self.multihead = eqx.nn.MultiheadAttention(n_heads, embed_dim, key=key[0])
         self.norm = [eqx.nn.LayerNorm(embed_dim, elementwise_affine=affine),
                      eqx.nn.LayerNorm(embed_dim, elementwise_affine=affine)]
         self.ffn = [eqx.nn.Linear(embed_dim, hidden_dim, key=key[1]),
-                    #eqx.nn.Linear(hidden_dim, hidden_dim, key=key[2]),
-                    eqx.nn.Linear(hidden_dim, embed_dim, key=key[3]),
-                    eqx.nn.Linear(embed_dim, out_dim, key=key[4])]
-        self.L = jax.random.normal(key[5], (in_dim,))
-        self.b = 0.01 * jax.random.normal(key[6], (out_dim,))
-        self.omega = (10 ** jnp.linspace(-4,1.5,embed_dim//2))
+                    eqx.nn.Linear(hidden_dim, embed_dim, key=key[2]),
+                    eqx.nn.Linear(embed_dim, out_dim, key=key[3])]
+        self.L = jax.random.normal(key[4], (in_dim,))
+        self.b = 0.01 * jax.random.normal(key[5], (out_dim,))
+        self.omega = (10 ** jnp.linspace(-5,2,embed_dim//2))
 
     def pe(self, x):
         x = x + jnp.linspace(0, jnp.pi, x.shape[-1])
@@ -141,15 +139,13 @@ class MultiheadBlock(eqx.Module):
         x = self.norm[0](x)
 
         y = jax.vmap(self.ffn[0])(x)
-        #y = jax.vmap(self.ffn[1])(y)
-        #y = jax.nn.gelu(y)
+        y = jax.nn.gelu(y)
         y = jax.vmap(self.ffn[1])(y)
         x = x + self.dropout(y, key=key)
         x = jax.nn.gelu(x)
         x = self.norm[1](x)
         x = jax.vmap(self.ffn[2])(x) 
         x = jnp.einsum('ij,i,j -> j', x, self.L, self.b)
-        #x = jax.nn.silu(x)
         return x
 
 
@@ -184,7 +180,7 @@ class MLP(eqx.Module):
         x = self.layers[-1](x,key)
         return x
 
-class GCN(Model):
+class GCN(GraphNet):
     """
     Graph Convolution Networks.
     """
@@ -200,7 +196,7 @@ class GCN(Model):
         self.encode_graph = True
 
 
-class HNN(Model):
+class HNN(GraphNet):
     """
     Hyperbolic Neural Networks.
     """
@@ -219,7 +215,7 @@ class HNN(Model):
     def __call__(self, x): 
         return super(HNN, self).__call__(x)
 
-class HGCN(Model):
+class HGCN(GraphNet):
     """
     Hyperbolic-GCN.
     """
