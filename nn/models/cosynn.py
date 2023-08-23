@@ -117,18 +117,11 @@ class COSYNN(eqx.Module):
         z0 = z[:,:self.kappa]
         zi = z[:,self.kappa:]
         ze = self.pool.embed[i](zi, adj, w)
-        zi = self.manifold.mobius_add(zi,ze, self.c)
         s = self.pool[i](z, adj, w)
         z = jnp.concatenate([z0,zi], axis=-1)
         return z,s
 
-    def delta(self, z):
-        f = z
-        i = self.kappa
-        return z
-    
     def decode(self, tx, z, key=prng(0)):
-        z = self.delta(z) 
         txz = self.align(tx,z)
         u = self.decoder(txz, key=key)
         return u, (u, txz)
@@ -143,14 +136,14 @@ class COSYNN(eqx.Module):
         A[0] = jnp.zeros(x.shape[:1]*2).at[adj[0],adj[1]].set(1.)
         for i in self.pool.keys():
             z,s = self.embed_pool(x, adj, w, i)
-            S[i] = jax.nn.softmax(self.log(s) * 200., axis=0)
+            S[i] = jax.nn.softmax(self.log(s) * 1., axis=0)
             x = jnp.einsum('ij,ik -> jk', S[i], z)
             y = jnp.einsum('ij,ki -> kj', S[i], y)
             A[i+1] = jnp.einsum('ji,jk,kl -> il', S[i], A[i], S[i])
             adj, w = dense_to_coo(A[i])
             z_r = jnp.concatenate([z_r, x], axis=0)
             y_r = jnp.concatenate([y_r, y], axis=-1)
-            loss_ent += jax.scipy.special.entr(S[i]).sum()
+            loss_ent += jax.scipy.special.entr(S[i]).mean()
 
         if inspect:
             return z_r, y_r, loss_ent, S, A
@@ -174,7 +167,7 @@ class COSYNN(eqx.Module):
         grad_x = grad[:,1:]
         utxz = self.align_pde(tx, z, u)
         F = self.F_max * jax.nn.sigmoid(self.pde.F(utxz))
-        v = self.v_max * 1. * jax.nn.sigmoid(self.pde.v(utxz))
+        v = self.v_max * jax.nn.sigmoid(self.pde.v(utxz))
 
         f0 = grad_t
         f1 = -F * jnp.einsum('j,ij -> i', u, grad_x)

@@ -32,9 +32,9 @@ if __name__ == '__main__':
 
     if args.slaw:
         args.w_data = 1.
-        args.w_pde =  0.1
-        args.w_gpde = 0.01
-        args.w_ent = 1. 
+        args.w_pde =  .05
+        args.w_gpde = .005
+        args.w_ent = 100. 
     print(f'\n w[data,pde,gpde,ent] = {args.w_data},{args.w_pde},{args.w_gpde},{args.w_ent}')
     print(f'\n data path: {args.data_path}\n adj path: {args.adj_path}\n\n')
 
@@ -104,11 +104,12 @@ if __name__ == '__main__':
     n = args.num_col # number of temporal colocation points
     tic = time.time()
     mode = 1 if args.slaw else 0
-    state = {'a':0.,'b':0.} if args.slaw else None
-    key = prng(0)
+    state = {'a':jnp.zeros(4), 'b':jnp.zeros(4)} if args.slaw else None
+    key = jax.random.PRNGKey(0)
     for i in range(args.epochs):
+        
         key = jax.random.split(key)[0]
-        ti = jax.random.randint(prng(i), (n, 1), args.kappa, T - args.tau_max).astype(jnp.float32)
+        ti = jax.random.randint(key, (n, 1), args.kappa, T - args.tau_max).astype(jnp.float32)
         idx = ti.astype(int)
         taus = jnp.arange(1, 1+args.tau_max, 1)
         bundles = idx + taus
@@ -139,7 +140,7 @@ if __name__ == '__main__':
             if args.verbose:
                 print(f'{i:04d}/{args.epochs}: loss_data = {loss[0]:.2e}, loss_pde = {loss[1]:.2e}, loss_gpde = {loss[2]:.2e}, loss_ent = {loss[3]:.2e}  lr = {schedule(i).item():.4e} (time: {time.time()-tic:.1f} s)')
             tic = time.time()
-            x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, key=prng(i))
+            x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, key=key)
             
             if i<args.drop_iter:
                 model = eqx.tree_inference(model, value=False)

@@ -9,7 +9,7 @@ config_args = {
         'dropout': (0.1, 'dropout probability'),
         'epochs': (20001, 'number of epochs to train for'),
         'slaw': (False, 'whether to use scaled loss approximate weighting (SLAW)'),
-        'drop_iter': (100000, 'iteration to stop dropout'),
+        'drop_iter': (-1, 'iteration to stop dropout'),
         'weight_decay': (1e-3, 'l2 regularization strength'),
         'beta': (0.99, 'moving average coefficient for SLAW'),
         'log_freq': (50, 'how often to compute print train/val metrics (in epochs)'),
@@ -29,9 +29,9 @@ config_args = {
         'embed_init': (3, 'flag indicating number of embedding modules which remain to be init-ed.'), 
         # loss weights
         'w_data': (1., 'weight for data loss.'),
-        'w_pde': (10., 'weight for pde loss.'),
-        'w_gpde': (1e+5, 'weight for gpde loss.'),
-        'w_ent': (1., 'weight for assignment matrix entropy loss.'),
+        'w_pde': (1e+3, 'weight for pde loss.'),
+        'w_gpde': (1e+9, 'weight for gpde loss.'),
+        'w_ent': (10., 'weight for assignment matrix entropy loss.'),
         'F_max': (5., 'max value of convective term'),
         'v_max': (0., 'max value of viscous term.'),
         'input_scaler': (1., 'rescaling of input'),
@@ -97,6 +97,7 @@ config_args = {
 }
 
 def set_dims(args):
+    if args.drop_iter==-1: args.drop_iter = .9 * args.epochs
     if args.decoder=='MHA': 
         args.dec_width = args.enc_width 
         args.dec_depth = 1

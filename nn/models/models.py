@@ -88,10 +88,10 @@ class MHA(eqx.Module):
         super(MHA, self).__init__()
         dims, act, _ = get_dim_act(args)
         layers = []
-        key, subkey = jax.random.split(prng_key)
+        key = jax.random.PRNGKey(0)
         for i in range(len(dims) - 1):
             in_dim, out_dim = dims[i], dims[i + 1]
-            layers.append(MultiheadBlock(in_dim, out_dim, p=args.dropout, key=subkey))
+            layers.append(MultiheadBlock(in_dim, out_dim, p=args.dropout, key=key))
             key= jax.random.split(key)[0]
         self.layers = layers 
         self.encode_graph = False
@@ -115,16 +115,16 @@ class MultiheadBlock(eqx.Module):
         super(MultiheadBlock, self).__init__()
         key = jax.random.split(jax.random.PRNGKey(0),10)
         self.dropout = eqx.nn.Dropout(p)
-        embed_dim = 32
+        embed_dim = 40
         self.multihead = eqx.nn.MultiheadAttention(n_heads, embed_dim, key=key[0])
         self.norm = [eqx.nn.LayerNorm(embed_dim, elementwise_affine=affine),
                      eqx.nn.LayerNorm(embed_dim, elementwise_affine=affine)]
         self.ffn = [eqx.nn.Linear(embed_dim, hidden_dim, key=key[1]),
                     eqx.nn.Linear(hidden_dim, embed_dim, key=key[2]),
                     eqx.nn.Linear(embed_dim, out_dim, key=key[3])]
-        self.L = jax.random.normal(key[4], (in_dim,))
+        self.L = 0.1 * jax.random.normal(key[4], (in_dim,out_dim))
         self.b = 0.01 * jax.random.normal(key[5], (out_dim,))
-        self.omega = (10 ** jnp.linspace(-5,2,embed_dim//2))
+        self.omega = (10 ** jnp.linspace(-5,.5,embed_dim//2))
 
     def pe(self, x):
         x = x + jnp.linspace(0, jnp.pi, x.shape[-1])
@@ -145,7 +145,7 @@ class MultiheadBlock(eqx.Module):
         x = jax.nn.gelu(x)
         x = self.norm[1](x)
         x = jax.vmap(self.ffn[2])(x) 
-        x = jnp.einsum('ij,i,j -> j', x, self.L, self.b)
+        x = jnp.einsum('ij,ij,j -> j', x, self.L, self.b)
         return x
 
 
