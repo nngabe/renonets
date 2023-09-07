@@ -1,4 +1,20 @@
---epochs 20001 --manifold PoincareBall --w_pde 0.0 --w_gpde 0.0 --path 2982_c1 
---epochs 20001 --manifold PoincareBall --w_pde 10.0 --w_gpde 0.0 --path 2982_c1 
---epochs 20001 --manifold PoincareBall --w_pde 10.0 --w_gpde 100000.0 --path 2982_c1 
---epochs 20001 --manifold PoincareBall --v_scaler 0.01 --path 2982_c1 
+--epochs 80001 --manifold PoincareBall --v_max 1.0  --decoder MHA
+--epochs 80001 --manifold PoincareBall --v_max 0.1  --decoder MHA
+--epochs 80001 --manifold PoincareBall --v_max 0.01  --decoder MHA
+--epochs 80001 --manifold PoincareBall --w_pde 1000.0 --w_gpde 1000000000.0  --decoder MHA
+--epochs 80001 --manifold PoincareBall --w_pde 1000.0 --w_gpde 0.0  --decoder MHA
+--epochs 80001 --manifold PoincareBall --w_pde 1e-16 --w_gpde 1000000000.0  --decoder MHA
+--epochs 80001 --manifold PoincareBall --w_pde 1e-16 --w_gpde 0.0  --decoder MHA
+--epochs 80001 --manifold Euclidean --w_pde 1000.0 --w_gpde 1000000000.0  --decoder MHA
+--epochs 80001 --manifold Euclidean --w_pde 1000.0 --w_gpde 0.0  --decoder MHA
+--epochs 80001 --manifold Euclidean --w_pde 1e-16 --w_gpde 0.0  --decoder MHA
+--epochs 80001 --manifold PoincareBall --v_max 1.0 
+--epochs 80001 --manifold PoincareBall --v_max 0.1 
+--epochs 80001 --manifold PoincareBall --v_max 0.01 
+--epochs 80001 --manifold PoincareBall --w_pde 1000.0 --w_gpde 1000000000.0 
+--epochs 80001 --manifold PoincareBall --w_pde 1000.0 --w_gpde 0.0 
+--epochs 80001 --manifold PoincareBall --w_pde 1e-16 --w_gpde 1000000000.0 
+--epochs 80001 --manifold PoincareBall --w_pde 1e-16 --w_gpde 0.0 
+--epochs 80001 --manifold Euclidean --w_pde 1000.0 --w_gpde 1000000000.0 
+--epochs 80001 --manifold Euclidean --w_pde 1000.0 --w_gpde 0.0 
+--epochs 80001 --manifold Euclidean --w_pde 1e-16 --w_gpde 0.0 

@@ -35,28 +35,28 @@ if __name__ == '__main__':
         args.w_pde =  .05
         args.w_gpde = .005
         args.w_ent = 100. 
-    print(f'\n w[data,pde,gpde,ent] = {args.w_data},{args.w_pde},{args.w_gpde},{args.w_ent}')
+    print(f'\n w[data,pde,gpde,ent] = {args.w_data:.0e},{args.w_pde:.0e},{args.w_gpde:.0e},{args.w_ent:.0e}')
     print(f'\n data path: {args.data_path}\n adj path: {args.adj_path}\n\n')
 
     A = pd.read_csv(args.adj_path, index_col=0).to_numpy()
     adj = jnp.array(jnp.where(A))
     x = pd.read_csv(args.data_path, index_col=0).dropna().T
     x = x.T.diff().rolling(50,center=True, win_type='gaussian').mean(std=7).dropna().T 
-    x = 1e-2 * jnp.array(x.to_numpy())
+    x = 1e-4 * jnp.array(x.to_numpy())
     n,T = x.shape
 
     adj = add_self_loops(adj)
-    x_test, adj_test, idx_test = random_subgraph(x, adj, batch_size=min(128,n//10), key=prng(0))
+    x_test, adj_test, idx_test = random_subgraph(x, adj, batch_size=args.batch_size, key=prng(0))
     idx_train = jnp.where(jnp.ones(n, dtype=jnp.int32).at[idx_test].set(0))[0]    
     x_train, adj_train, idx_train = subgraph(idx_train, x, adj)
 
-    args.batch_size = min(128, sup_power_of_two(n//args.batch_red))
     args.pool_dims[-1] = 128 #sup_power_of_two(2 * n//args.pool_red)
     if args.log_path:
         model, args = utils.read_model(args)
     else:
         model = COSYNN(args)
-    
+   
+    model = utils.init_he(model, prng(123)) 
     if args.verbose: 
         print(f'\nMODULE: MODEL[DIMS](curv)')
         print(f' encoder: {args.encoder}{args.enc_dims}({args.c})')
@@ -99,13 +99,14 @@ if __name__ == '__main__':
     log['loss'] = {}
     x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, key=prng(0))
    
-    print(f'\nSLAW: {args.slaw}, dropout: i<{args.drop_iter}\n')
+    print(f'\nSLAW: {args.slaw}, dropout: p={args.dropout}, num_col={args.num_col}, \n')
     
     n = args.num_col # number of temporal colocation points
     tic = time.time()
     mode = 1 if args.slaw else 0
-    state = {'a':jnp.zeros(4), 'b':jnp.zeros(4)} if args.slaw else None
+    state = {'a': jnp.zeros(4), 'b': jnp.zeros(4)} if args.slaw else None
     key = jax.random.PRNGKey(0)
+    model = eqx.tree_inference(model, value=False)
     for i in range(args.epochs):
         
         key = jax.random.split(key)[0]
@@ -140,11 +141,15 @@ if __name__ == '__main__':
             if args.verbose:
                 print(f'{i:04d}/{args.epochs}: loss_data = {loss[0]:.2e}, loss_pde = {loss[1]:.2e}, loss_gpde = {loss[2]:.2e}, loss_ent = {loss[3]:.2e}  lr = {schedule(i).item():.4e} (time: {time.time()-tic:.1f} s)')
             tic = time.time()
-            x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, key=key)
             
-            if i<args.drop_iter:
-                model = eqx.tree_inference(model, value=False)
-        
+            bsize,gsize,j = 0,0,0
+            while bsize<args.batch_size or gsize!=2048:
+                x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, key=prng(i+j))
+                bsize = x.shape[0]
+                gsize=adj.shape[1]
+                j +=1
+            model = eqx.tree_inference(model, value=False)
+            
         if i % args.log_freq * 100 == 0:
             utils.save_model(model, log, stamp=stamp)
 

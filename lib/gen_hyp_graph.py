@@ -18,11 +18,11 @@ plt.rcParams['text.usetex'] = True
 
 class HyperbolicGraphSimulation:
 
-    def __init__(self):
+    def __init__(self,seed=123):
         #bulkwise sampler is quicker then sampling one by one
-        self.uniformSampler = Distribution(stats.uniform()) 
+        self.uniformSampler = Distribution(stats.uniform(), seed)
         self.dir = ""
-
+        
     def setOutputFolder(self, dir):
         if not os.path.isdir(dir): os.mkdir(dir)
         self.dir = dir 
@@ -208,15 +208,16 @@ class Distribution :
     
     '''
 
-    def __init__(self, dist):
+    def __init__(self, dist, seed=123):
         self.dist = dist
+        self.seed=seed
         self.resample()
         
     def __str__(self):
         return str(self.dist)
     
     def resample(self):
-        self.randomNumbers = self.dist.rvs(self.n)
+        self.randomNumbers = self.dist.rvs(self.n, random_state=self.seed)
         self.idx = 0
     
     def rvs(self, n=1):

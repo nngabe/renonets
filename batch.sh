@@ -6,7 +6,7 @@ if [[ $# -eq 0 ]] ; then
     exit 0
 fi
 
-MAX_TIME=8100 
+MAX_TIME=810000
 IFS=$'\n'
 m=$(cat $file | wc -l) # number of arguments in args.txt file
 i=0

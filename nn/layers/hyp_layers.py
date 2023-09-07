@@ -45,29 +45,22 @@ class HypLinear(eqx.Module):
     dropout: eqx.nn.Dropout
     manifold: manifolds.base.Manifold
     c: float
-    bias: jax.numpy.ndarray
-    weight: jax.numpy.ndarray
+    linear: eqx.nn.Linear
 
     def __init__(self, key, manifold, in_features, out_features, c, p, use_bias):
         super(HypLinear, self).__init__()
         self.dropout = dropout(p) 
         self.manifold = manifold
         self.c = c
-        lin = eqx.nn.Linear(in_features, out_features, key=key)
-        self.bias = lin.bias
-        self.weight = lin.weight 
-        self.reset_parameters()
+        self.linear = eqx.nn.Linear(in_features, out_features, key=key)
 
-    def reset_parameters(self):
-        init_weights = jax.nn.initializers.glorot_uniform()
-        self.weight = init_weights(prng_key,self.weight.shape)
 
     def __call__(self, x, key=prng_key):
-        drop_weight = self.dropout(self.weight, key=prng_key)  
+        drop_weight = self.dropout(self.linear.weight, key=prng_key)  
         mv = self.manifold.mobius_matvec(drop_weight, x, self.c)
         res = self.manifold.proj(mv, self.c)
         #if self.use_bias:
-        bias = self.manifold.proj_tan0(self.bias.reshape(1, -1), self.c)
+        bias = self.manifold.proj_tan0(self.linear.bias.reshape(1, -1), self.c)
         hyp_bias = self.manifold.expmap0(bias, self.c)
         hyp_bias = self.manifold.proj(hyp_bias, self.c)
         res = self.manifold.mobius_add(res, hyp_bias, c=self.c)

@@ -51,13 +51,12 @@ class COSYNN(eqx.Module):
         self.v_max = args.v_max
         self.x_dim = args.x_dim
         self.t_dim = args.time_dim
-        self.pool_dims = [self.pool.pools[i].layers[-1].linear.bias.shape[0] for i in self.pool.pools]
+        self.pool_dims = [self.pool.pools[i].layers[-1].linear.linear.bias.shape[0] for i in self.pool.pools]
         self.scalers = {'t_lin': 10. ** jnp.arange(2, 2*self.t_dim, 1, dtype=jnp.float32),
                         't_log': 10. ** jnp.arange(-2, 2*self.t_dim, 1, dtype=jnp.float32),
                         't_cos': 10. **jnp.arange(-4,2*self.t_dim, 1, dtype=jnp.float32),
                         'reps' : jnp.array([args.rep_scaler]),
                         'input': jnp.array([args.input_scaler]),
-                        'tau': jnp.array([args.tau_scaler])
                        }
         self.k_lin = self.t_dim//2
         self.k_log = self.t_dim - self.k_lin
@@ -218,24 +217,28 @@ class COSYNN(eqx.Module):
         elif mode==0: #default
             loss = self.w_data * loss_data + self.w_pde * loss_pde + self.w_gpde * loss_gpde + self.w_ent * loss_ent
             return loss
-       
+            
+    def slaw_update(self, loss, state):
+        assert state != None
+        a,b = state['a'], state['b']
+        a = self.beta * a + (1. - self.beta) * loss**2
+        b = self.beta * b + (1. - self.beta) * loss
+        s = jnp.sqrt(a - b**2)
+        w = loss.shape[0] / s / (1./s).sum()
+        w = w/w.min()
+        loss = w * loss
+        loss = self.w_data * loss[0] + self.w_pde * loss[1] + self.w_gpde * loss[2] + self.w_ent * loss[3] 
+        state['a'], state['b'] = a,b
+        return loss, state 
+  
     def loss_vmap(self, xb, adj, tb, yb, key=prng(0), mode=0, state=None):
         n = xb.shape[0]
         kb = jax.random.split(key, n) 
         loss_vec = lambda x,t,y,k: self.loss_single_auto(x, adj, t, y, k, mode=mode)
         loss = jax.vmap(loss_vec)(xb, tb, yb, kb)
         if mode==1:
-            assert state != None
-            a,b = state['a'], state['b']
-            loss = loss/n
-            a = self.beta * a + (1. - self.beta) * loss**2
-            b = self.beta * b + (1. - self.beta) * loss
-            s = jnp.sqrt(a - b**2)
-            w = loss.shape[0] / s / (1./s).sum()
-            loss = w * loss
-            loss = self.w_data * loss[0] + self.w_pde * loss[1] + self.w_gpde * loss[2] + self.w_ent * loss[3] 
-            state['a'], state['b'] = a,b
-            return loss.sum(), state
+           loss, state = self.slaw_update(loss, state)
+           return loss.sum()/n, state
         else:
             return loss/n, state
 
@@ -246,17 +249,8 @@ class COSYNN(eqx.Module):
         loss = 0. if mode==0 else jnp.zeros(4)
         loss = jax.lax.fori_loop(0, n, body_fun, loss)
         if mode==1:
-            assert state != None
-            a,b = state['a'], state['b']
-            loss = loss/n
-            a = self.beta * a + (1. - self.beta) * loss**2
-            b = self.beta * b + (1. - self.beta) * loss
-            s = jnp.sqrt(a - b**2)
-            w = loss.shape[0] / s / (1./s).sum()
-            loss = w * loss
-            loss = self.w_data * loss[0] + self.w_pde * loss[1] + self.w_gpde * loss[2] + self.w_ent * loss[3] 
-            state['a'], state['b'] = a,b
-            return loss.sum(), state
+            loss, state = self.slaw_update(loss, state)
+            return loss.sum()/n, state
         else:
             return loss/n, state
 

@@ -157,3 +157,56 @@ def add_self_loops(
 
     return tmp
 
+def gen_hyp(n, v, c, seed=131):    
+    R = 2.*jnp.log(n/v)
+    idx = jnp.array(jnp.triu_indices(n,1)).T
+    key = jax.random.PRNGKey(seed)
+    keys = jax.random.split(key,10)
+    
+    idr = lambda x: np.arcsinh((x*(np.cosh(c*R)-1))/c)/c
+    r,phi = idr(jax.random.uniform(keys[0], (n,))), 2*np.pi*jax.random.uniform(keys[1], (n,))
+    r,phi = jnp.array(r), jnp.array(phi)
+    r,phi = jax.lax.stop_gradient(r), jax.lax.stop_gradient(phi)
+    def dist(i,j):
+        dphi = jnp.pi - jnp.abs(jnp.pi - jnp.abs(phi[i]-phi[j]))
+        return jnp.arccosh(jnp.cosh(r[i])*jnp.cosh(r[j]) - jnp.sinh(r[i])*jnp.sinh(r[j])*jnp.cos(dphi))
+    
+    @jax.jit
+    def mask(e):
+        i,j = e[0],e[1]
+        return dist(i,j)<R
+    
+    chunk = int(1e+6)    
+    edges = idx[:chunk][jax.vmap(mask)(idx[:chunk])]
+    for j in range(idx.shape[0]//chunk): 
+        _idx = idx[j*chunk:(j+1)*chunk]
+        _e = _idx[jax.vmap(mask)(_idx)]
+        edges = jnp.concatenate([edges, _e], axis=0)
+        
+    pos = jnp.array([r*np.cos(phi), r*np.sin(phi)]).T.tolist()
+    
+    return edges, pos
+
+def draw(G, pos, part=None):
+    cmap = 'jet'
+    if part:
+        nc = [p**.45 for p in part.values()]
+        nx.draw(G, pos=pos, node_size=50, node_color=nc, width=.5, edgecolors='k',cmap=cmap)
+    else:
+        nx.draw(G, pos=pos, node_size=50, node_color='dodgerblue', width=.5, edgecolors='k',cmap=cmap)
+
+def gen_graph(n, v, c, seed=123, plot=True):
+    edges, pos = gen_hyp(n,v,c,seed)
+    edges = [(e[0],e[1]) for e in edges.tolist()]
+    G = nx.Graph()
+    G.add_edges_from(edges)
+    lcc = max(nx.connected_components(G), key=len)
+    G = G.subgraph(lcc)
+    re = {old:new for new,old in enumerate(lcc)}
+    print(f'c = {c}, N = {G.number_of_nodes()}')
+    partition = community_louvain.best_partition(G)
+    if plot: 
+        draw(G,pos,partition)
+        plt.save_fig(f'G_N{n}_c{c}_v{v}_seed{seed}.pdf')
+    return G, partition, re
+

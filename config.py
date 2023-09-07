@@ -7,16 +7,16 @@ config_args = {
     'training_config': {
         'lr': (1e-5, 'learning rate'),
         'dropout': (0.1, 'dropout probability'),
-        'epochs': (20001, 'number of epochs to train for'),
+        'epochs': (80001, 'number of epochs to train for'),
         'slaw': (False, 'whether to use scaled loss approximate weighting (SLAW)'),
-        'drop_iter': (-1, 'iteration to stop dropout'),
         'weight_decay': (1e-3, 'l2 regularization strength'),
         'beta': (0.99, 'moving average coefficient for SLAW'),
         'log_freq': (50, 'how often to compute print train/val metrics (in epochs)'),
-        'max_norm': (0.5, 'max norm for gradient clipping, or None for no gradient clipping'),
+        'max_norm': (.5, 'max norm for gradient clipping, or None for no gradient clipping'),
         'verbose': (True, 'print training data to console'),
         'opt_study': (False, 'whether to run a hyperparameter optimization study or not'),
-        'num_col': (3, 'number of colocation points in the time domain'),
+        'num_col': (4, 'number of colocation points in the time domain'),
+        'batch_size': (128, 'number of nodes in test and batch graphs'),
         'batch_red': (2, 'factor of reduction for batch size'),
         'pool_red': (4, 'factor of reduction for each pooling step'),
     },
@@ -25,18 +25,17 @@ config_args = {
         'enc_init': (1, 'flag indicating whether the encoder remains to be init-ed or not.'),
         'dec_init': (1, 'flag indicating whether the decoder remains to be init-ed or not.'),
         'pde_init': (2, 'flag indicating number of pde functions which remain to be init-ed.'),
-        'pool_init': (3, 'flag indicating number of pooling modules which remain to be init-ed.'),
-        'embed_init': (3, 'flag indicating number of embedding modules which remain to be init-ed.'), 
+        'pool_init': (2, 'flag indicating number of pooling modules which remain to be init-ed.'),
+        'embed_init': (2, 'flag indicating number of embedding modules which remain to be init-ed.'), 
         # loss weights
         'w_data': (1., 'weight for data loss.'),
-        'w_pde': (1e+3, 'weight for pde loss.'),
+        'w_pde': (1e+4, 'weight for pde loss.'),
         'w_gpde': (1e+9, 'weight for gpde loss.'),
         'w_ent': (10., 'weight for assignment matrix entropy loss.'),
         'F_max': (5., 'max value of convective term'),
-        'v_max': (0., 'max value of viscous term.'),
+        'v_max': (.01, 'max value of viscous term.'),
         'input_scaler': (1., 'rescaling of input'),
-        'rep_scaler': (10., 'rescaling of graph features'),
-        'tau_scaler': (10., 'rescaling of tau encoding'),
+        'rep_scaler': (1., 'rescaling of graph features'),
 
         # which layers use time encodings and what dim should encodings be
         'time_enc': ([0,1,1], 'whether to insert time encoding in encoder, decoder, and pde functions, respectively.'),
@@ -54,13 +53,13 @@ config_args = {
         'pool': ('HGCN', 'which model to compute coarsening matrices'),
 
         # dims of neural nets. -1 will be inferred based on args.skip and args.time_enc. 
-        'enc_width': (28, 'dimensions of encoder layers'),
+        'enc_width': (32, 'dimensions of encoder layers'),
         'dec_width': (312,'dimensions of decoder layers'),
         'pde_width': (312, 'dimensions of each pde layers'),
         'pool_width': (128, 'dimensions of each pde layers'),
         'enc_depth': (2, 'dimensions of encoder layers'),
-        'dec_depth': (3,'dimensions of decoder layers'),
-        'pde_depth': (3, 'dimensions of each pde layers'),
+        'dec_depth': (4,'dimensions of decoder layers'),
+        'pde_depth': (4, 'dimensions of each pde layers'),
         'pool_depth': (2, 'dimensions of each pooling layer'),
         'enc_dims': ([-1,96,-1], 'dimensions of encoder layers'),
         'dec_dims': ([-1,256,256,-1],'dimensions of decoder layers'),
@@ -97,10 +96,10 @@ config_args = {
 }
 
 def set_dims(args):
-    if args.drop_iter==-1: args.drop_iter = .9 * args.epochs
     if args.decoder=='MHA': 
         args.dec_width = args.enc_width 
-        args.dec_depth = 1
+        args.pde_width = args.enc_width
+        args.dec_depth = 1 
         args.pde_depth = 1
     args.enc_dims[0] = args.kappa
     args.enc_dims[-1] = args.enc_width 
