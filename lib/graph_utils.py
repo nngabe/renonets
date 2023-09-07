@@ -2,8 +2,10 @@ from typing import Union, List, Tuple
 
 import jax
 import jax.numpy as jnp
-import numpy as onp
+import numpy as np
 import networkx as nx
+from community import community_louvain
+import matplotlib.pyplot as plt
 
 prng = lambda: jax.random.PRNGKey(0)
 
@@ -178,7 +180,7 @@ def gen_hyp(n, v, c, seed=131):
     
     chunk = int(1e+6)    
     edges = idx[:chunk][jax.vmap(mask)(idx[:chunk])]
-    for j in range(idx.shape[0]//chunk): 
+    for j in range(1,idx.shape[0]//chunk): 
         _idx = idx[j*chunk:(j+1)*chunk]
         _e = _idx[jax.vmap(mask)(_idx)]
         edges = jnp.concatenate([edges, _e], axis=0)
@@ -207,6 +209,6 @@ def gen_graph(n, v, c, seed=123, plot=True):
     partition = community_louvain.best_partition(G)
     if plot: 
         draw(G,pos,partition)
-        plt.save_fig(f'G_N{n}_c{c}_v{v}_seed{seed}.pdf')
+        plt.savefig(f'G_N{n}_c{c}_v{v}_seed{seed}.pdf')
     return G, partition, re
 
