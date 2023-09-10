@@ -42,7 +42,7 @@ if __name__ == '__main__':
     A = pd.read_csv(args.adj_path, index_col=0).to_numpy()
     adj = jnp.array(jnp.where(A))
     x = pd.read_csv(args.data_path, index_col=0).dropna().T
-    x = x.T.diff().rolling(20,center=True, win_type='gaussian').mean(std=3).dropna().cumsum().T 
+    for i in range(4): x = x.T.diff().rolling(20,center=True, win_type='gaussian').mean(std=40).dropna().cumsum().T 
     x = jnp.array(x.to_numpy())
     x = x/x.max() #(x - x.min())/(x.max() - x.min())
     n,T = x.shape
