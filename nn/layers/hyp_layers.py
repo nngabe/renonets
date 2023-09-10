@@ -13,7 +13,7 @@ import equinox as eqx
 import equinox.nn as nn
 from equinox.nn import Dropout as dropout
 
-prng_key = jax.random.PRNGKey(0)
+prng = lambda i: jax.random.PRNGKey(i)
 act_dict = {'relu': jax.nn.relu, 'silu': jax.nn.silu, 'lrelu': jax.nn.leaky_relu}
 
 
@@ -25,7 +25,7 @@ class DenseAtt(eqx.Module):
     def __init__(self, in_features, heads=1, alpha=0.2):
         super(DenseAtt, self).__init__()
         act = lambda x: jax.nn.leaky_relu(x,alpha)
-        self.mlp = eqx.nn.MLP( 2 * in_features, heads, width_size=64, depth=2, activation=act, final_activation=act, key = prng_key)
+        self.mlp = eqx.nn.MLP( 2 * in_features, heads, width_size=64, depth=2, activation=act, final_activation=act, key = prng(0))
         self.heads = heads
 
     def __call__(self, x):
@@ -55,8 +55,8 @@ class HypLinear(eqx.Module):
         self.linear = eqx.nn.Linear(in_features, out_features, key=key)
 
 
-    def __call__(self, x, key=prng_key):
-        drop_weight = self.dropout(self.linear.weight, key=prng_key)  
+    def __call__(self, x, key=prng(0)):
+        drop_weight = self.dropout(self.linear.weight, key=prng(0))  
         mv = self.manifold.mobius_matvec(drop_weight, x, self.c)
         res = self.manifold.proj(mv, self.c)
         #if self.use_bias:
@@ -85,7 +85,7 @@ class HypAgg(eqx.Module):
         self.use_att = use_att
         self.attn = DenseAtt(in_features, heads=heads) if use_att else None
 
-    def __call__(self, x, adj, w=None):
+    def __call__(self, x, adj, w=None, key=prng(0)):
         s,r = adj[0],adj[1]
         n = x.shape[0]
         x = self.manifold.logmap0(x, c=self.c)
@@ -96,7 +96,6 @@ class HypAgg(eqx.Module):
             x_s = x[s]
             if isinstance(w,jnp.ndarray): x_s = jnp.einsum('ij,i -> ij', x_s, w)
             x_agg = jax.ops.segment_sum(x_s, r, n)
-            #x_agg = tree.tree_map(lambda x: jax.ops.segment_sum(x[s], r, n), x_tangent)
         x_agg = self.manifold.proj(self.manifold.expmap0(x_agg, c=self.c), c=self.c)
         return x_agg
 
@@ -149,8 +148,8 @@ class HGCNLayer(eqx.Module):
         self.agg = HypAgg(manifold, c_in, out_features, p, use_att)
         self.hyp_act = HypAct(manifold, c_in, c_out, act)
 
-    def __call__(self, x, adj, w=None):
-        h = self.linear(x)
+    def __call__(self, x, adj, w=None, key=prng(0)):
+        h = self.linear(x, key)
         h = self.agg(h, adj, w)
         h = self.hyp_act(h)
         output = h, adj

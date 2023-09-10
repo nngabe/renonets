@@ -1,5 +1,5 @@
-#import warnings
-#warnings.filterwarnings('ignore')
+import warnings
+warnings.filterwarnings('ignore')
 
 import os
 import sys
@@ -21,6 +21,7 @@ from config import parser, set_dims
 from lib import utils
 from lib.graph_utils import subgraph, random_subgraph, louvain_subgraph, add_self_loops, sup_power_of_two, pad_graph
 
+jax.config.update("jax_enable_x64", True)
 
 prng = lambda i=0: jax.random.PRNGKey(i)
 
@@ -41,8 +42,9 @@ if __name__ == '__main__':
     A = pd.read_csv(args.adj_path, index_col=0).to_numpy()
     adj = jnp.array(jnp.where(A))
     x = pd.read_csv(args.data_path, index_col=0).dropna().T
-    x = x.T.diff().rolling(50,center=True, win_type='gaussian').mean(std=7).dropna().T 
-    x = 1e-4 * jnp.array(x.to_numpy())
+    x = x.T.diff().rolling(20,center=True, win_type='gaussian').mean(std=3).dropna().cumsum().T 
+    x = jnp.array(x.to_numpy())
+    x = x/x.max() #(x - x.min())/(x.max() - x.min())
     n,T = x.shape
 
     adj = add_self_loops(adj)
@@ -107,10 +109,13 @@ if __name__ == '__main__':
     state = {'a': jnp.zeros(4), 'b': jnp.zeros(4)} if args.slaw else None
     key = jax.random.PRNGKey(0)
     model = eqx.tree_inference(model, value=False)
+    n_slabs = 100
+    slab = jnp.linspace(args.kappa+1000, T-args.tau_max, n_slabs).astype(int)
     for i in range(args.epochs):
         
         key = jax.random.split(key)[0]
-        ti = jax.random.randint(key, (n, 1), args.kappa, T - args.tau_max).astype(jnp.float32)
+        ks = max(n_slabs, int(n_slabs * i/args.epochs / .6))
+        ti = jax.random.randint(key, (n, 1), args.kappa, slab[ks]).astype(jnp.float32)
         idx = ti.astype(int)
         taus = jnp.arange(1, 1+args.tau_max, 1)
         bundles = idx + taus
@@ -139,14 +144,14 @@ if __name__ == '__main__':
             log['loss'][i] = [loss[0].item(), loss[1].item(), loss[2].item(), loss[3].item()]
             
             if args.verbose:
-                print(f'{i:04d}/{args.epochs}: loss_data = {loss[0]:.2e}, loss_pde = {loss[1]:.2e}, loss_gpde = {loss[2]:.2e}, loss_ent = {loss[3]:.2e}  lr = {schedule(i).item():.4e} (time: {time.time()-tic:.1f} s)')
+                print(f'{i:04d}/{args.epochs} : loss_data = {loss[0]:.2e}, loss_pde = {loss[1]:.2e}, loss_gpde = {loss[2]:.2e}, loss_ent = {loss[3]:.2e}  lr = {schedule(i).item():.4e} (time: {time.time()-tic:.1f} s)')
             tic = time.time()
             
             bsize,gsize,j = 0,0,0
-            while bsize<args.batch_size or gsize!=2048:
+            while bsize<args.batch_size or gsize!=adj_test.shape[1]:
                 x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, key=prng(i+j))
                 bsize = x.shape[0]
-                gsize=adj.shape[1]
+                gsize = adj.shape[1]
                 j +=1
             model = eqx.tree_inference(model, value=False)
             

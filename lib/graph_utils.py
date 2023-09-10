@@ -89,7 +89,7 @@ def random_subgraph(
     ):
     """ obtain batch graph by hopping from initial nodes until desired batch_size is obtained.""" 
     num_nodes = jnp.unique(jnp.concatenate(adj)).size
-    index = jax.random.randint(key, (5,), 0, num_nodes) 
+    index = jax.random.randint(key, (2,), 0, num_nodes) 
     node_mask = index_to_mask(index, num_nodes)
     assert num_nodes > batch_size
 

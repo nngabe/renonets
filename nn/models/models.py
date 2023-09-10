@@ -12,8 +12,7 @@ import equinox as eqx
 import equinox.nn as nn
 from equinox import Module, static_field
 
-prng_key = jax.random.PRNGKey(0)
-prng_fn = lambda i: jax.random.PRNGKey(i)
+prng = lambda i:  jax.random.PRNGKey(i)
 
 class null(eqx.Module):
     def __init__(self, args):
@@ -36,13 +35,13 @@ class GraphNet(eqx.Module):
         self.skip = args.skip
         self.res = args.res
 
-    def __call__(self, x, adj=None, w=None):
+    def __call__(self, x, adj=None, w=None, key=prng(0)):
         if self.res:
-            return self._res(x, adj, w)
+            return self._res(x, adj, w, key)
         elif self.skip:
-            return self._cat(x, adj, w)
+            return self._cat(x, adj, w, key)
         else:
-            return self._forward(x, adj, w)
+            return self._forward(x, adj, w, key)
 
     def exp(self, x):
         x = self.manifold.proj_tan0(x, c=self.c)
@@ -55,28 +54,31 @@ class GraphNet(eqx.Module):
         y = y * jnp.sqrt(self.c) * 1.4763057
         return y
 
-    def _forward(self, x, adj=None, w=None):
+    def _forward(self, x, adj, w, key):
         for layer in self.layers:
             if self.encode_graph:
-                x,_ = layer(x, adj, w)
+                x,_ = layer(x, adj, w, key)
             else:
                 x = layer(x)
+            key = jax.random.split(key)[0]
         return x 
 
-    def _cat(self, x, adj=None, w=None):
+    def _cat(self, x, adj, w, key):
         x_i = [x]
         x = self.exp(x)
         for layer in self.layers:
-            x,_ = layer(x, adj, w)
+            x,_ = layer(x, adj, w, key)
             x_i.append(x)
+            key = jax.random.split(key)[0]
         return jnp.concatenate(x_i, axis=1)
     
-    def _res(self, x, adj=None, w=None):
+    def _res(self, x, adj, w, key):
         x = self.exp(x)
         for conv,lin in zip(self.layers,self.lin):
-            h,_ = conv(x, adj, w)
+            h,_ = conv(x, adj, w, key)
             x = jax.vmap(lin)(self.log(x)) + self.log(h)
             x = self.exp(x)
+            key = jax.random.split(key)[0]
         return x
 
 
@@ -95,7 +97,7 @@ class MHA(eqx.Module):
             key = jax.random.split(key)[0]
         self.blocks = blocks
         self.encode_graph = False
-    def __call__(self, x, adj=None, w=None, key=prng_key):
+    def __call__(self, x, adj=None, w=None, key=prng(0)):
         for block in self.blocks:
             x = block(x, key)
             key = jax.random.split(key)[0]
@@ -111,12 +113,12 @@ class MultiheadBlock(eqx.Module):
     dropout: eqx.nn.Dropout
     omega: np.ndarray
 
-    def __init__(self, in_dim, out_dim, hidden_dim=312, n_heads=3, p=0.1, affine=True, key=prng_key):
+    def __init__(self, in_dim, out_dim, hidden_dim=256, n_heads=2, p=0.1, affine=True, key=prng(0)):
         super(MultiheadBlock, self).__init__()
         key = jax.random.split(jax.random.PRNGKey(0),10)
         self.dropout = eqx.nn.Dropout(p)
         embed_dim = 40
-        self.multihead = eqx.nn.MultiheadAttention(n_heads, embed_dim, use_query_bias=True, use_key_bias=True, use_value_bias=True, use_output_bias=True, dropout_p=p, key=key[0])
+        self.multihead = eqx.nn.MultiheadAttention(n_heads, embed_dim, use_value_bias=True, use_output_bias=True, dropout_p=p, key=key[0])
         self.norm = [eqx.nn.LayerNorm(embed_dim, elementwise_affine=affine),
                      eqx.nn.LayerNorm(embed_dim, elementwise_affine=affine)]
         self.ffn = [eqx.nn.Linear(embed_dim, hidden_dim, key=key[1]),
@@ -131,7 +133,7 @@ class MultiheadBlock(eqx.Module):
         xo = jnp.einsum('i,j -> ij', x, self.omega)
         return jnp.concatenate([jnp.cos(xo), jnp.sin(xo)],axis=-1)
 
-    def __call__(self, x, key=prng_key):
+    def __call__(self, x, key=prng(0)):
         x = self.pe(x)
         attn = self.multihead(x,x,x,key=key)
         x = x + self.dropout(attn, key=key)
@@ -162,7 +164,7 @@ class MLP(eqx.Module):
         self.drop_fn = eqx.nn.Dropout(args.dropout)
         layers = []
         self.norm = []
-        key, subkey = jax.random.split(prng_key)
+        key, subkey = jax.random.split(prng(0))
         for i in range(len(dims) - 1):
             in_dim, out_dim = dims[i], dims[i + 1]
             layers.append(Linear(in_dim, out_dim, args.dropout, act, subkey))
@@ -170,12 +172,12 @@ class MLP(eqx.Module):
             key, subkey = jax.random.split(key)
         self.layers = nn.Sequential(layers)
         self.encode_graph = False
-    def __call__(self, x, adj=None, w=None, key=prng_key):
+    def __call__(self, x, adj=None, w=None, key=prng(0)):
         x = self.layers[0](x,key)
         key = jax.random.split(key)[0]
         for layer,norm in zip(self.layers[1:-1],self.norm[1:-1]):
-            x = x + layer(x, key)
-            x = norm(x)
+            x = layer(x, key) #+ x
+            #x = norm(x)
             key = jax.random.split(key)[0]
         x = self.layers[-1](x,key)
         return x
@@ -192,7 +194,7 @@ class HGCN(GraphNet):
         self.curvatures.append(args.c)
         hgc_layers = []
         lin_layers = []
-        key, subkey = jax.random.split(prng_key)
+        key, subkey = jax.random.split(prng(0))
         for i in range(len(dims) - 1):
             c_in, c_out = self.curvatures[i], self.curvatures[i + 1]
             in_dim, out_dim = dims[i], dims[i + 1]
@@ -206,6 +208,6 @@ class HGCN(GraphNet):
         self.lin = nn.Sequential(lin_layers)
         self.encode_graph = True
 
-    def __call__(self, x, adj, w=None):
-        return super(HGCN, self).__call__(x, adj, w)
+    def __call__(self, x, adj, w=None, key=prng(0)):
+        return super(HGCN, self).__call__(x, adj, w, key)
 

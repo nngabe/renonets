@@ -33,6 +33,9 @@ class COSYNN(eqx.Module):
     k_lin: Tuple[int,int]
     k_log: Tuple[int,int]
     beta: np.float32
+    B: jnp.ndarray
+    fe: bool
+    eta: np.float32
 
     def __init__(self, args):
         super(COSYNN, self).__init__()
@@ -55,16 +58,17 @@ class COSYNN(eqx.Module):
         self.scalers = {'t_lin': 10. ** jnp.arange(2, 2*self.t_dim, 1, dtype=jnp.float32),
                         't_log': 10. ** jnp.arange(-2, 2*self.t_dim, 1, dtype=jnp.float32),
                         't_cos': 10. **jnp.arange(-4,2*self.t_dim, 1, dtype=jnp.float32),
-                        'reps' : jnp.array([args.rep_scaler]),
-                        'input': jnp.array([args.input_scaler]),
                        }
         self.k_lin = self.t_dim//2
         self.k_log = self.t_dim - self.k_lin
         self.beta = args.beta 
+        self.B = 1. * jax.random.normal(prng(0), (args.kappa, args.f_dim))
+        self.fe = args.fe
+        self.eta = .01
 
     def time_encode(self, t):
         if self.t_dim==1: 
-            return jnp.log( t * 100. + 1. )
+            return t/3000.#jnp.log( t * 100. + 1. )
         t_lin = t / jnp.clip(self.scalers['t_lin'], 1e-7)
         t_log = t / jnp.clip(self.scalers['t_log'], 1e-7)
         t_cos = t / jnp.clip(self.scalers['t_cos'], 1e-7)
@@ -84,9 +88,22 @@ class COSYNN(eqx.Module):
         y = self.manifold.logmap0(y, self.c)
         y = y * jnp.sqrt(self.c) * 1.4763057
         return y
-  
-    def encode(self, x0, adj, t, eps=0.):
-        z_x = self.encoder(x0, adj)
+
+    def fourier_enc(self, x, key=prng(1)):
+        x = x * jnp.exp(self.eta * jax.random.normal(key, x.shape))
+        Bx = jnp.einsum('ij,kj -> ik', x, self.B)
+        y = jnp.concatenate([jnp.cos(Bx), jnp.sin(Bx)], axis=-1)
+        return y
+
+    def adv_enc(self, x, key=prng(0)):
+        key = jax.random.split(key,2)
+        y = x * jnp.exp(self.eta * jax.random.normal(key[0], x.shape))
+        x = x * jnp.exp(self.eta * jax.random.normal(key[1], x.shape))
+        return jnp.concatenate([x,y], axis=-1)
+ 
+    def encode(self, x0, adj, t, eps=0.,key=prng(0)):
+        x = self.fourier_enc(x0, key=key) if self.fe else x0
+        z_x = self.encoder(x, adj, key=key)
         z = z_x[:,:-self.x_dim]
         x = eps * z_x[:,-self.x_dim:]
         t = t*jnp.ones((x.shape[0],1))
@@ -97,7 +114,7 @@ class COSYNN(eqx.Module):
         t,x = tx[:1], tx[1:]
         t = self.time_encode(t)
         z0 = z[:self.kappa]
-        zi = z[self.kappa:] * self.scalers['reps'][0]
+        zi = z[self.kappa:] 
         txz = jnp.concatenate([t,x,z0,zi], axis=0)
         return txz
 
@@ -112,11 +129,12 @@ class COSYNN(eqx.Module):
         zi = self.log(zi)
         return jnp.concatenate([z0,zi], axis=-1)
 
-    def embed_pool(self, z, adj, w, i):
+    def embed_pool(self, z, adj, w, i, key):
+        keys = jax.random.split(key,4)
         z0 = z[:,:self.kappa]
         zi = z[:,self.kappa:]
-        ze = self.pool.embed[i](zi, adj, w)
-        s = self.pool[i](z, adj, w)
+        ze = self.pool.embed[i](zi, adj, w, keys[0])
+        s = self.pool[i](z, adj, w, keys[1])
         z = jnp.concatenate([z0,zi], axis=-1)
         return z,s
 
@@ -125,7 +143,7 @@ class COSYNN(eqx.Module):
         u = self.decoder(txz, key=key)
         return u, (u, txz)
 
-    def renorm(self, x, adj, y, inspect=False):
+    def renorm(self, x, adj, y, key=prng(0),inspect=False):
         w = None
         loss_ent = 0.
         S = {}
@@ -134,10 +152,12 @@ class COSYNN(eqx.Module):
         y_r = y
         A[0] = jnp.zeros(x.shape[:1]*2).at[adj[0],adj[1]].set(1.)
         for i in self.pool.keys():
-            z,s = self.embed_pool(x, adj, w, i)
-            S[i] = jax.nn.softmax(self.log(s) * 1., axis=0)
-            x = jnp.einsum('ij,ik -> jk', S[i], z)
-            y = jnp.einsum('ij,ki -> kj', S[i], y)
+            key = jax.random.split(key)[0]
+            z,s = self.embed_pool(x, adj, w, i, key)
+            S[i] = jax.nn.softmax(self.log(s) * 10., axis=0)
+            m,n = S[i].shape
+            x = jnp.einsum('ij,ik -> jk', S[i], z) * (m/n)
+            y = jnp.einsum('ij,ki -> kj', S[i], y) * (m/n)
             A[i+1] = jnp.einsum('ji,jk,kl -> il', S[i], A[i], S[i])
             adj, w = dense_to_coo(A[i])
             z_r = jnp.concatenate([z_r, x], axis=0)
@@ -149,24 +169,24 @@ class COSYNN(eqx.Module):
         else:
             return z_r, y_r, loss_ent
 
-    def val_grad(self, tx, z):
-        f = lambda tx: self.decode(tx,z)
+    def val_grad(self, tx, z, key):
+        f = lambda tx: self.decode(tx,z,key)
         grad, val = jax.jacfwd(f, has_aux=True)(tx)
         return grad, (grad, val)
 
-    def val_grad_lap(self, tx, z):
-        vg = lambda tx,z: self.val_grad(tx,z)
+    def val_grad_lap(self, tx, z, key):
+        vg = lambda tx,z: self.val_grad(tx,z,key)
         grad2, (grad,(u,ttxz)) = jax.jacfwd(vg, has_aux=True)(tx,z)
         hess = jax.vmap(jnp.diag)(grad2)
         lap_x = hess[:,1:].sum(1)
         return (u.flatten(), ttxz), grad, lap_x
 
-    def pde_res(self, tx, z, u, grad, lap_x):
+    def pde_res(self, tx, z, u, grad, lap_x, key):
         grad_t = grad[:,0]
         grad_x = grad[:,1:]
         utxz = self.align_pde(tx, z, u)
-        F = self.F_max * jax.nn.sigmoid(self.pde.F(utxz))
-        v = self.v_max * jax.nn.sigmoid(self.pde.v(utxz))
+        F = self.F_max * jax.nn.sigmoid(self.pde.F(utxz,key))
+        v = self.v_max * jax.nn.sigmoid(self.pde.v(utxz,key))
 
         f0 = grad_t
         f1 = -F * jnp.einsum('j,ij -> i', u, grad_x)
@@ -174,9 +194,12 @@ class COSYNN(eqx.Module):
         res = f0 - f1 - f2
         return res, res
 
-    def pde_res_grad(self, tx, z, u, grad, lap_x):
-        gpde, res = jax.jacfwd(self.pde_res, has_aux=True)(tx, z, u, grad, lap_x)
+    def pde_res_grad(self, tx, z, u, grad, lap_x, key):
+        gpde, res = jax.jacfwd(self.pde_res, has_aux=True)(tx, z, u, grad, lap_x, key)
         return res, gpde
+
+    def pde_bc(self):
+        return 0.
 
     def div(self, grad_x):
         return jax.vmap(jnp.trace)
@@ -189,21 +212,24 @@ class COSYNN(eqx.Module):
         return jax.vmap(jnp.sum)(jnp.abs(grad_x))
 
     def loss_single_auto(self, x0, adj, t, y, key, mode=0):
-        tx,z = self.encode(x0, adj, t)
+        keys = jax.random.split(key,5)
+        tx,z = self.encode(x0, adj, t, key=keys[0])
         z = self.align_pool(z)
         if mode==1:
             # compute entropy and align separately from renorm
             _, _, loss_ent = self.renorm(z, adj, y)
         else: 
             # renorm z and y only in training loop  
-            z, y, loss_ent = self.renorm(z, adj, y)
+            z, y, loss_ent = self.renorm(z, adj, y, key=keys[1])
             tx = tx[0] * jnp.ones((z.shape[0],1))
         loss_data = loss_pde = loss_gpde = 0.
         for i in range(y.shape[0]):
-            (u, txz), grad, lap_x = jax.vmap(self.val_grad_lap)(tx, z)
+            vgl = lambda tx,z: self.val_grad_lap(tx, z, keys[i])
+            (u, txz), grad, lap_x = jax.vmap(vgl)(tx, z)
             f =  jnp.sqrt(jnp.square(u).sum(1))
             loss_data += jnp.square(f - y[i]).sum()
-            resid, gpde = jax.vmap(self.pde_res_grad)(tx, z, u, grad, lap_x)
+            pde_rg = lambda tx, z, u, grad, lap_x: self.pde_res_grad(tx, z, u, grad, lap_x, keys[i])
+            resid, gpde = jax.vmap(pde_rg)(tx, z, u, grad, lap_x)
             loss_pde += jnp.square(resid).sum()
             loss_gpde += jnp.square(gpde).sum()      
             tx = tx.at[:,0].set(tx[:,0]+1.)
