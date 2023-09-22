@@ -5,6 +5,8 @@ This repository contains an implementation of a multiscale operator learning fra
 The most important modules in this repository are:
 
 train.py - data loading, LR scheduling, graph sampling, and logging of training data.
+
+
 nn/models/cosynn.py - contains all modules of the framework shown below as well as vmapped and serial loss functions.
 
 ![page1_image1](https://github.com/nngabe/msonet/assets/50005216/a947fa80-9a06-4818-8012-49a4186d2622)
