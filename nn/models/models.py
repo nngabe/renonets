@@ -1,9 +1,11 @@
 from typing import Any, Optional, Sequence, Tuple, Union, List
+import copy
 
 import manifolds
 import layers.hyp_layers as hyp_layers
 from layers.layers import GCNConv, GATConv, Linear, get_dim_act
 import utils.math_utils as pmath
+import lib.function_spaces
 
 import numpy as np
 import jax
@@ -115,18 +117,27 @@ class MultiheadBlock(eqx.Module):
 
     def __init__(self, in_dim, out_dim, hidden_dim=256, n_heads=2, p=0.1, affine=True, key=prng(0)):
         super(MultiheadBlock, self).__init__()
-        key = jax.random.split(jax.random.PRNGKey(0),10)
+        keys = jax.random.split(jax.random.PRNGKey(0), 10)
         self.dropout = eqx.nn.Dropout(p)
-        embed_dim = 40
-        self.multihead = eqx.nn.MultiheadAttention(n_heads, embed_dim, use_value_bias=True, use_output_bias=True, dropout_p=p, key=key[0])
+        embed_dim = 64
+        self.multihead = eqx.nn.MultiheadAttention(
+            n_heads, 
+            embed_dim, 
+            use_query_bias=True, 
+            use_key_bias=True, 
+            use_value_bias=True, 
+            use_output_bias=True, 
+            dropout_p=p, 
+            key=keys[0]
+        )
         self.norm = [eqx.nn.LayerNorm(embed_dim, elementwise_affine=affine),
                      eqx.nn.LayerNorm(embed_dim, elementwise_affine=affine)]
-        self.ffn = [eqx.nn.Linear(embed_dim, hidden_dim, key=key[1]),
-                    eqx.nn.Linear(hidden_dim, embed_dim, key=key[2]),
-                    eqx.nn.Linear(embed_dim, out_dim, key=key[3])]
-        self.L = (1. / in_dim) * jax.random.normal(key[4], (in_dim,out_dim))
-        self.b = 0. * jax.random.normal(key[5], (out_dim,))
-        self.omega = (10 ** jnp.linspace(-4,1.5,embed_dim//2))
+        self.ffn = [eqx.nn.Linear(embed_dim, hidden_dim, key=keys[1]),
+                    eqx.nn.Linear(hidden_dim, embed_dim, key=keys[2]),
+                    eqx.nn.Linear(embed_dim, out_dim, key=keys[3])]
+        self.L = (1. / in_dim) * jax.random.normal(keys[4], (in_dim,out_dim))
+        self.b = 0. * jax.random.normal(keys[5], (out_dim,))
+        self.omega = (10 ** jnp.linspace(-3.,1.,embed_dim//2))
 
     def pe(self, x):
         x = x + jnp.linspace(0, jnp.pi, x.shape[-1])
@@ -134,19 +145,21 @@ class MultiheadBlock(eqx.Module):
         return jnp.concatenate([jnp.cos(xo), jnp.sin(xo)],axis=-1)
 
     def __call__(self, x, key=prng(0)):
+        keys = jax.random.split(key, 10)
         x = self.pe(x)
-        attn = self.multihead(x,x,x,key=key)
-        x = x + self.dropout(attn, key=key)
+        attn = self.multihead(x,x,x,key=keys[0])
+        x = x + self.dropout(attn, key=keys[1])
         x = jax.nn.gelu(x)
         x = self.norm[0](x)
 
         y = jax.vmap(self.ffn[0])(x)
         y = jax.nn.gelu(y)
         y = jax.vmap(self.ffn[1])(y)
-        x = x + self.dropout(y, key=key)
+        x = x + self.dropout(y, key=keys[2])
         x = jax.nn.gelu(x)
-        x = self.norm[1](x)
+        #x = self.norm[1](x)
         x = jax.vmap(self.ffn[2])(x) 
+        x = jax.nn.gelu(x)
         x = jnp.einsum('ij,ij -> j', x, self.L)
         #x = jnp.einsum('ij,ij,j -> j', x, self.L, self.b)
         return x
@@ -177,10 +190,76 @@ class MLP(eqx.Module):
         key = jax.random.split(key)[0]
         for layer,norm in zip(self.layers[1:-1],self.norm[1:-1]):
             x = layer(x, key) #+ x
-            #x = norm(x)
+            x = norm(x)
             key = jax.random.split(key)[0]
         x = self.layers[-1](x,key)
         return x
+
+class DeepOnet(eqx.Module):
+    
+    trunk: eqx.Module
+    branch: eqx.Module
+    func_space: eqx.Module
+    drop_fn: eqx.nn.Dropout
+    norm: List[eqx.nn.LayerNorm]
+    x_dim: int
+    tx_dim: int
+    u_dim: int
+    depth: int
+    p: int
+
+    def __init__(self, args, layer=Linear):
+        super(DeepOnet, self).__init__()
+        self.func_space = getattr(lib.function_spaces, args.func_space)()
+        dims, act, _ = get_dim_act(args)
+        self.drop_fn = eqx.nn.Dropout(args.dropout)
+        self.norm = []
+        self.x_dim = args.x_dim
+        self.tx_dim = args.time_dim + args.x_dim 
+        self.u_dim = args.kappa
+        self.p = args.p_basis
+        keys = jax.random.split(prng(0))
+
+        # set dimensions of branch net        
+        branch_dims = copy.copy(dims)
+        branch_dims[0] = self.u_dim
+        branch_dims[-1] *= args.x_dim
+        branch_dims[-1] *= self.p
+
+        # set dimensions of trunk net
+        trunk_dims = copy.copy(dims)
+        trunk_dims[0] = self.tx_dim + sum(args.enc_dims[1:]) - self.x_dim
+        trunk_dims[-1] *= self.p
+
+        branch,trunk = [],[]
+        for i in range(len(dims) - 1):
+            trunk.append(Linear(trunk_dims[i], trunk_dims[i+1], args.dropout, act, keys[i]))
+            branch.append(Linear(branch_dims[i], branch_dims[i+1], args.dropout, act, keys[i]))
+        
+        self.trunk = nn.Sequential(trunk)
+        self.branch = nn.Sequential(branch)
+        self.depth = len(self.trunk)
+
+    def __call__(self, x, adj=None, w=None, key=prng(0)):
+        keys = jax.random.split(key,10)
+        tx, uz = x[:self.tx_dim], x[self.tx_dim:]
+        u, z = uz[:self.u_dim], uz[self.u_dim:]
+        txz = jnp.concatenate([tx,z],axis=-1)
+        t = self.trunk[0](txz, keys[0])
+        b = u #self.func_space(u)
+        b = self.branch[0](b, keys[2])
+        keys = jax.random.split(keys[0])
+        
+        for i in range(1,self.depth-1):
+            t = self.trunk[i](t, keys[0])
+            b = self.branch[i](b, keys[1])
+            keys = jax.random.split(keys[0])
+        
+        t = self.trunk[-1](t, keys[0]).reshape(-1, self.p)
+        b = self.branch[-1](b, keys[1]).reshape(-1, self.p, self.x_dim)
+        G = jnp.einsum('ijk,ij -> i', b, t) / self.p
+        
+        return G
 
 
 class HGCN(GraphNet):

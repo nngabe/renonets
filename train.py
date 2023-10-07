@@ -50,15 +50,15 @@ if __name__ == '__main__':
     adj = add_self_loops(adj)
     x_test, adj_test, idx_test = random_subgraph(x, adj, batch_size=args.batch_size, key=prng(0))
     idx_train = jnp.where(jnp.ones(n, dtype=jnp.int32).at[idx_test].set(0))[0]    
-    x_train, adj_train, idx_train = subgraph(idx_train, x, adj)
+    x_train, adj_train, _ = x, adj, None #subgraph(idx_train, x, adj)
 
     args.pool_dims[-1] = 128 #sup_power_of_two(2 * n//args.pool_red)
     if args.log_path:
         model, args = utils.read_model(args)
     else:
         model = COSYNN(args)
-   
-    model = utils.init_he(model, prng(123)) 
+        model = utils.init_he(model, prng(123))
+
     if args.verbose: 
         print(f'\nMODULE: MODEL[DIMS](curv)')
         print(f' encoder: {args.encoder}{args.enc_dims}({args.c})')
@@ -85,8 +85,9 @@ if __name__ == '__main__':
         print(f'\nx[train] = {x[idx_train].shape}, adj[train] = {adj_train.shape}')
         print(f'x[test]  = {x[idx_test].shape},  adj[test]  = {adj_test.shape}')
     
-    schedule = optax.warmup_exponential_decay_schedule(0., peak_value=args.lr, warmup_steps=args.epochs//10,
-                                                        transition_steps=args.epochs, decay_rate=1e-2, end_value=args.lr/2e+1)
+    schedule = optax.warmup_exponential_decay_schedule(init_value=0., peak_value=args.lr, warmup_steps=args.epochs//100,
+                                                        transition_steps=args.epochs, decay_rate=5e-3, end_value=args.lr/1e+2)
+    #schedule = optax.warmup_cosine_decay_schedule(init_value=0., peak_value=args.lr, warmup_steps=args.epochs//100,
     optim = optax.chain(optax.clip(args.max_norm), optax.adamw(learning_rate=schedule)) 
     opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
 
