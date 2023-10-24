@@ -13,6 +13,16 @@ A brief overview of important modules in this repository are:
 **nn/models/models.py** 
 - contains modules for the encoder and renormalization networks (GCN, HGCN) and decoder networks (MLP, Transformer, DeepOnet).
 
+**lib/graph_utils.py**
+- utilities for sampling, padding, and otherwise manipulating graphs.
+
+**lib/positional_encoding.py**
+- functions for computing positional encoding (node2vec, random walk PE, and laplacian eigenvector PE).
+
+**nn/manifolds/**
+- manifold definitions for hyperbolic layers ported from the original pytorch code ([HGCN](https://github.com/HazyResearch/hgcn)) to JAX.
+- Includes Euclidean, Poincar\'{e}, and Hyperboloid manifolds.
+
 <img width="903" alt="renonet" src="https://github.com/nngabe/renonet/assets/50005216/012602fe-19f1-4ac4-a540-04fde74a3b40">
 
 
