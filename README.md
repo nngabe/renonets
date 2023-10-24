@@ -5,22 +5,22 @@ This repository contains an implementation of a multiscale operator learning fra
 A brief overview of important modules in this repository are:
 
 **train.py**
-* data loading, LR scheduling, graph sampling, and logging of training data.
+* Data loading, LR scheduling, graph sampling, and logging of training data.
 
 **nn/models/renonet.py** 
-* contains a module of the framework shown below, as well as vmapped and serial loss functions for optimizing the loss shown below.
+* Contains a module of the framework shown below, as well as vmapped and serial loss functions for optimizing the loss shown below.
 
 **nn/models/models.py** 
-- contains modules for the encoder and renormalization networks (GCN, HGCN) and decoder networks (MLP, Transformer, DeepOnet).
+- Modules for the encoder and renormalization networks (GCN, HGCN) and decoder networks (MLP, Transformer, DeepOnet).
 
 **lib/graph_utils.py**
-- utilities for sampling, padding, and otherwise manipulating graphs.
+- Utilities for sampling, padding, and otherwise manipulating graphs.
 
 **lib/positional_encoding.py**
-- functions for computing positional encoding (node2vec, random walk PE, and laplacian eigenvector PE).
+- Functions for computing positional encoding (node2vec, random walk PE, and laplacian eigenvector PE).
 
 **nn/manifolds/**
-- manifold definitions for hyperbolic layers ported from the original pytorch code ([HGCN](https://github.com/HazyResearch/hgcn)) to JAX.
+- Manifold definitions for hyperbolic layers. Ported from the original pytorch code ([HGCN](https://github.com/HazyResearch/hgcn)) to JAX.
 - Includes Euclidean, Poincaré, and Hyperboloid manifolds.
 
 <img width="903" alt="renonet" src="https://github.com/nngabe/renonet/assets/50005216/012602fe-19f1-4ac4-a540-04fde74a3b40">
