@@ -11,7 +11,7 @@ import numpy as onp
 import jax.numpy as jnp
 from argparse import Namespace
 
-from nn.models.cosynn import COSYNN, _forward
+from nn.models.renonet import RenONet, _forward
 def trunc_init(weight: jax.Array, key: jax.random.PRNGKey) -> jax.Array:
   out, in_ = weight.shape
   stddev = math.sqrt(1 / in_)
@@ -62,6 +62,6 @@ def read_model(args):
     #args.pde_init = 2
     #args.pool_init = 3
     #args.embed_init = 3
-    model = COSYNN(args)
+    model = RenONet(args)
     model = eqx.tree_deserialise_leaves(param_path, model)
     return model, args

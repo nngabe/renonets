@@ -30,12 +30,14 @@ class GraphNet(eqx.Module):
     encode_graph: bool
     res: bool
     manifold: Optional[manifolds.base.Manifold] = None
+    pe_dim: int
 
     def __init__(self, args):
         super(GraphNet, self).__init__()
         self.c = args.c
         self.skip = args.skip
         self.res = args.res
+        self.pe_dim = args.pe_dim
 
     def __call__(self, x, adj=None, w=None, key=prng(0)):
         if self.res:
@@ -66,8 +68,9 @@ class GraphNet(eqx.Module):
         return x 
 
     def _cat(self, x, adj, w, key):
-        x_i = [x]
         x = self.exp(x)
+        if self.pe_dim>0: x_i = [x[:,self.pe_dim:], x[:,:self.pe_dim]]
+        else: x_i = [x]
         for layer in self.layers:
             x,_ = layer(x, adj, w, key)
             x_i.append(x)
@@ -207,6 +210,8 @@ class DeepOnet(eqx.Module):
     u_dim: int
     depth: int
     p: int
+    trunk_dims: List[int]
+    branch_dims: List[int]
 
     def __init__(self, args, layer=Linear):
         super(DeepOnet, self).__init__()
@@ -221,20 +226,20 @@ class DeepOnet(eqx.Module):
         keys = jax.random.split(prng(0))
 
         # set dimensions of branch net        
-        branch_dims = copy.copy(dims)
-        branch_dims[0] = self.u_dim
-        branch_dims[-1] *= args.x_dim
-        branch_dims[-1] *= self.p
+        self.branch_dims = copy.copy(dims)
+        self.branch_dims[0] = self.u_dim
+        self.branch_dims[-1] *= args.x_dim
+        self.branch_dims[-1] *= self.p
 
         # set dimensions of trunk net
-        trunk_dims = copy.copy(dims)
-        trunk_dims[0] = self.tx_dim + sum(args.enc_dims[1:]) - self.x_dim
-        trunk_dims[-1] *= self.p
+        self.trunk_dims = copy.copy(dims)
+        self.trunk_dims[0] = self.tx_dim + sum(args.enc_dims) - self.u_dim - self.x_dim
+        self.trunk_dims[-1] *= self.p
 
         branch,trunk = [],[]
         for i in range(len(dims) - 1):
-            trunk.append(Linear(trunk_dims[i], trunk_dims[i+1], args.dropout, act, keys[i]))
-            branch.append(Linear(branch_dims[i], branch_dims[i+1], args.dropout, act, keys[i]))
+            trunk.append(Linear(self.trunk_dims[i], self.trunk_dims[i+1], args.dropout, act, keys[i]))
+            branch.append(Linear(self.branch_dims[i], self.branch_dims[i+1], args.dropout, act, keys[i]))
         
         self.trunk = nn.Sequential(trunk)
         self.branch = nn.Sequential(branch)

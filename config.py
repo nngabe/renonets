@@ -40,9 +40,17 @@ config_args = {
         'rep_scaler': (1., 'rescaling of graph features'),
 
         # which layers use time encodings and what dim should encodings be
+        'pe_dim': (0, 'dimension of positional encoding'),
         'time_enc': ([0,1,1], 'whether to insert time encoding in encoder, decoder, and pde functions, respectively.'),
         'time_dim': (1, 'dimension of time embedding'), 
         'x_dim': (1, 'dimension of differentiable coordinates for PDE'),
+
+        # positional encoding arguments
+        'le_size': (0, 'size of laplacian eigenvector positional encoding'),
+        'rw_size': (0, 'size of random walk (diffusion) positional encoding'),
+        'n2v_size': (0, 'size of node2vec positional encoding'),
+        'pe_norm': (True, 'apply norm (standard scaler) on each pe type'),
+        'use_cached': (False, 'whether to use previously computed embeddings or not'),
 
         # input/output sizes
         'fe': (0, 'encode features or not'),
@@ -99,13 +107,8 @@ config_args = {
 }
 
 def set_dims(args):
-    if args.decoder=='MHA': 
-        args.dec_width = args.enc_width 
-        args.pde_width = args.enc_width
-        args.dec_depth = 1 
-        args.pde_depth = 1
-        args.num_col = 4
     args.enc_dims[0] = args.f_dim * 2 if args.fe else args.kappa
+    args.enc_dims[0] += args.pe_dim
     args.enc_dims[-1] = args.enc_width 
     args.dec_dims[-1] = args.x_dim
     args.enc_dims[1:-1] = (args.enc_depth-1) * [args.enc_width]
@@ -128,10 +131,11 @@ def set_dims(args):
     args.pool_dims[0] = enc_out - args.x_dim + args.time_dim 
     args.embed_dims[0] = enc_out - args.x_dim - args.kappa + args.time_dim 
     args.embed_dims[-1] = args.embed_dims[0] - args.time_dim
-    
+    return args 
+
 parser = argparse.ArgumentParser()
 for _, config_dict in config_args.items():
     parser = add_flags_from_config(parser, config_dict)
 args = parser.parse_args()
 args.manifold_pool = args.manifold
-set_dims(args)
+args = set_dims(args)

@@ -15,48 +15,48 @@ import jax.numpy as jnp
 import equinox as eqx
 import optax
 
-from nn.models.cosynn import COSYNN, loss_scan, loss_terms, make_step
+from nn.models.renonet import RenONet, loss_scan, loss_terms, make_step
 from config import parser, set_dims
 
 from lib import utils
 from lib.graph_utils import subgraph, random_subgraph, louvain_subgraph, add_self_loops, sup_power_of_two, pad_graph
+from lib.positional_encoding import pe_path_from, pos_enc
 
 jax.config.update("jax_enable_x64", True)
-
 prng = lambda i=0: jax.random.PRNGKey(i)
-
 
 if __name__ == '__main__':
     args = parser.parse_args()
     args.data_path = glob.glob(f'../data_cosynn/gels*{args.path}*')[0]
     args.adj_path = glob.glob(f'../data_cosynn/adj*{args.path.split("_")[0]}*')[0]
+    args.pe_path = pe_path_from(args.adj_path)
 
-    if args.slaw:
-        args.w_data = 1.
-        args.w_pde =  .05
-        args.w_gpde = .005
-        args.w_ent = 100. 
     print(f'\n w[data,pde,gpde,ent] = {args.w_data:.0e},{args.w_pde:.0e},{args.w_gpde:.0e},{args.w_ent:.0e}')
     print(f'\n data path: {args.data_path}\n adj path: {args.adj_path}\n\n')
+    
+    pe = pos_enc(args, le_size=args.le_size, rw_size=args.rw_size, n2v_size=args.n2v_size, norm=args.pe_norm, use_cached=args.use_cached)
+    pe = pe/pe.max()
+    args.pe_dim = pe.shape[1]
+    args = set_dims(args)    
 
     A = pd.read_csv(args.adj_path, index_col=0).to_numpy()
     adj = jnp.array(jnp.where(A))
+    adj = add_self_loops(adj)
     x = pd.read_csv(args.data_path, index_col=0).dropna().T
     for i in range(4): x = x.T.diff().rolling(20,center=True, win_type='gaussian').mean(std=40).dropna().cumsum().T 
     x = jnp.array(x.to_numpy())
     x = x/x.max() #(x - x.min())/(x.max() - x.min())
     n,T = x.shape
 
-    adj = add_self_loops(adj)
-    x_test, adj_test, idx_test = random_subgraph(x, adj, batch_size=args.batch_size, key=prng(0))
+    x_test, adj_test, pe_test, idx_test = random_subgraph(x, adj, pe, batch_size=args.batch_size, key=prng(0))
     idx_train = jnp.where(jnp.ones(n, dtype=jnp.int32).at[idx_test].set(0))[0]    
-    x_train, adj_train, _ = x, adj, None #subgraph(idx_train, x, adj)
+    x_train, adj_train, pe_train = x, adj, pe #subgraph(idx_train, x, adj)
 
     args.pool_dims[-1] = 128 #sup_power_of_two(2 * n//args.pool_red)
     if args.log_path:
         model, args = utils.read_model(args)
     else:
-        model = COSYNN(args)
+        model = RenONet(args)
         model = utils.init_he(model, prng(123))
 
     if args.verbose: 
@@ -92,15 +92,17 @@ if __name__ == '__main__':
     opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
 
     @jax.jit
-    def _batch(x,idx):
+    def _batch(x, pe, idx):
         win = jnp.arange(1 - args.kappa, 1, 1)
-        xb = x.at[:, idx + win].get()
-        xb = jnp.swapaxes(xb,0,1)
+        x = x.at[:, idx + win].get()
+        x = jnp.swapaxes(x,0,1)
+        pe = jnp.tile(pe, (idx.shape[0],1,1))
+        xb = jnp.concatenate([pe, x], axis=-1)
         return xb
    
     stamp = str(int(time.time()))
     log['loss'] = {}
-    x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, key=prng(0))
+    x, adj, pe, _   = random_subgraph(x_train, adj_train, pe_train, batch_size=args.batch_size, key=prng(0))
    
     print(f'\nSLAW: {args.slaw}, dropout: p={args.dropout}, num_col={args.num_col}, \n')
     
@@ -121,15 +123,15 @@ if __name__ == '__main__':
         taus = jnp.arange(1, 1+args.tau_max, 1)
         bundles = idx + taus
         yi = x[:,bundles].T
-        yi = jnp.einsum('ijk -> jik', yi)
-        xi = _batch(x, idx)
+        yi = jnp.swapaxes(yi,0,1)
+        xi = _batch(x, pe, idx)
         (loss, state), grad = loss_scan(model, xi, adj, ti, yi, key=key, mode=mode, state=state)
         grad = jax.tree_map(lambda x: 0. if jnp.isnan(x).any() else x, grad) 
         
         model, opt_state = make_step(grad, model, opt_state, optim)
         if i % args.log_freq == 0:
             
-            x, adj = x_test, adj_test
+            x, adj, pe = x_test, adj_test, pe_test
             model = eqx.tree_inference(model, value=True) 
 
             ti = jnp.linspace(args.kappa, T - args.tau_max , 10).reshape(-1,1)
@@ -137,8 +139,8 @@ if __name__ == '__main__':
             taus = jnp.arange(1, 1+args.tau_max, 1).astype(int)
             bundles = idx + taus
             yi = x[:,bundles].T
-            yi = jnp.einsum('ijk -> jik', yi)
-            xi = _batch(x, idx)
+            yi = jnp.swapaxes(yi,0,1)
+            xi = _batch(x, pe, idx)
             
             terms, _ = loss_terms(model, xi, adj, ti, yi)
             loss = [term.mean() for term in terms]
@@ -150,7 +152,7 @@ if __name__ == '__main__':
             
             bsize,gsize,j = 0,0,0
             while bsize<args.batch_size or gsize!=adj_test.shape[1]:
-                x, adj, _   = random_subgraph(x_train, adj_train, batch_size=args.batch_size, key=prng(i+j))
+                x, adj, pe, _   = random_subgraph(x_train, adj_train, pe_train, batch_size=args.batch_size, key=prng(i+j))
                 bsize = x.shape[0]
                 gsize = adj.shape[1]
                 j +=1

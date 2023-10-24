@@ -84,6 +84,7 @@ def mask_pad(n: int, n_pad: int, flip: bool = False):
 def random_subgraph( 
     x: jnp.array,
     adj: jnp.array,
+    pe: jnp.array,
     batch_size: int = 100,
     key: jax.random.PRNGKey = prng(),
     init: jnp.int32 = 5, 
@@ -115,8 +116,8 @@ def random_subgraph(
         adj = node_idx[adj]
     
     x, adj = pad_graph(x[index], adj, x_size=pad_size[0], adj_size=pad_size[1])
- 
-    return x, adj, index
+    pe = pe[index]
+    return x, adj, pe, index
 
 def louvain_subgraph(
     x: jnp.array,

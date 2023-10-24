@@ -12,7 +12,7 @@ from lib.graph_utils import dense_to_coo
 
 prng = lambda i: jax.random.PRNGKey(i)
 
-class COSYNN(eqx.Module):
+class RenONet(eqx.Module):
     encoder: eqx.Module
     decoder: eqx.Module
     pde: eqx.Module
@@ -38,7 +38,7 @@ class COSYNN(eqx.Module):
     eta: np.float32
 
     def __init__(self, args):
-        super(COSYNN, self).__init__()
+        super(RenONet, self).__init__()
         self.kappa = 0 if args.res else args.kappa
         self.encoder = getattr(models, args.encoder)(args)
         self.decoder = getattr(models, args.decoder)(args)
@@ -109,10 +109,11 @@ class COSYNN(eqx.Module):
         t = self.time_encode(t)
         t = t*jnp.ones((x.shape[0],1))
         tx = jnp.concatenate([t, x], axis=-1)
-        z0 = z[:,:self.kappa]
-        zi = z[:,self.kappa:]
-        zi = self.log(zi)
-        z = jnp.concatenate([z0,zi], axis=-1) 
+        #z0 = z[:,:self.kappa]
+        #zi = z[:,self.kappa:]
+        #zi = self.log(zi)
+        #z = jnp.concatenate([z0,zi], axis=-1) 
+        z = self.log(z)
         return tx, z
 
     def embed_pool(self, z, adj, w, i, key):
