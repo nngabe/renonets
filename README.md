@@ -10,7 +10,6 @@ nn/models/renonet.py - contains a module of the framework shown below, as well a
 
 nn/models/models.py - contains modules for the encoder and renormalization networks (GCN, HGCN) and decoder networks (MLP, Transformer, DeepOnet).
 
-[RenONet_implementation.pdf](https://github.com/nngabe/renonet/files/13127718/RenONet_implementation.pdf)
+<img width="903" alt="renonet" src="https://github.com/nngabe/renonet/assets/50005216/012602fe-19f1-4ac4-a540-04fde74a3b40">
 
-![RenONet](https://github.com/nngabe/renonet/files/13127626/RenONet_implementation.pdf)
 
