@@ -1,6 +1,6 @@
 # RenOnet: Renormalized Operator networks for complex social systems
 
-This repository contains an implementation of a multiscale operator learning framework for modelling and forecasting complex social systems. The framework learns multiscale dynamics of a complex system given an initial adjacency matrix $A^{(0)}$ and length $K$ history of the system $s_t^{0} = `\{s_{t-k}^{(0)}, \ k=1,\ldots,K \}`$  at various training times $t_i$. The model learns governing dynamics $\tilde{\mathbf{u}}^{(l)}_{t+\Delta t}(t,\mathbf{y}) = \mathcal{G}(v)(t,\mathbf{y};\zb_{t}^{(l)})$
+This repository contains an implementation of a multiscale operator learning framework for modelling and forecasting complex social systems. The framework learns multiscale dynamics of a complex system given an initial adjacency matrix $A^{(0)}$ and length $K$ history of the system. See figure below for details. [[slides](https://www.dropbox.com/scl/fi/2py8doe6gaqjwv9g6pcuw/Multiscale_operator_learning_for_social_dynamics.pdf?rlkey=1ljnspm5zjjvnc9mn66qfcvm6&dl=0)]
 
 A brief overview of important modules in this repository are:
 
