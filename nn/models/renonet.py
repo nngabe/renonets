@@ -66,18 +66,6 @@ class RenONet(eqx.Module):
         self.fe = args.fe
         self.eta = .01
 
-    def time_encode(self, t):
-        if self.t_dim==1: 
-            return t/3000.#jnp.log( t * 100. + 1. )
-        t_lin = t / jnp.clip(self.scalers['t_lin'], 1e-7)
-        t_log = t / jnp.clip(self.scalers['t_log'], 1e-7)
-        t_cos = t / jnp.clip(self.scalers['t_cos'], 1e-7)
-        t_lin = t_lin[:self.k_lin]
-        t_log = jnp.log( t_log[:self.k_log] + 1. )
-        t_cos = t_cos[:self.k_lin]
-        t = jnp.concatenate([t_lin, t_log])
-        return t
-
     def exp(self, x):
         x = self.manifold.proj_tan0(x, c=self.c)
         x = self.manifold.expmap0(x, c=self.c)
@@ -109,21 +97,12 @@ class RenONet(eqx.Module):
         t = self.time_encode(t)
         t = t*jnp.ones((x.shape[0],1))
         tx = jnp.concatenate([t, x], axis=-1)
-        #z0 = z[:,:self.kappa]
-        #zi = z[:,self.kappa:]
-        #zi = self.log(zi)
-        #z = jnp.concatenate([z0,zi], axis=-1) 
         z = self.log(z)
         return tx, z
 
     def embed_pool(self, z, adj, w, i, key):
-        keys = jax.random.split(key,4)
-        z0 = z[:,:self.kappa]
-        zi = z[:,self.kappa:]
-        ze = self.pool.embed[i](zi, adj, w, keys[0])
-        s = self.pool[i](z, adj, w, keys[1])
-        z = jnp.concatenate([z0,ze], axis=-1)
-        return z,s
+        # removed
+        return None, None
 
     def decode(self, tx, z, key=prng(0)):
         txz = jnp.concatenate([tx,z], axis=-1)
@@ -273,13 +252,8 @@ class RenONet(eqx.Module):
 
 
 def _forward(model, x0, t, adj, y, key=prng(0)):
-    tx,z = model.encode(x0, adj, t, key=key)
-    z = model.align_pool(z)
-    z, y, loss_ent = model.renorm(z, adj, z[:,0])
-    tx = tx[0] * jnp.ones((z.shape[0],1))
-    (u, ttxz), grad, lap_x = jax.vmap(self.val_grad_lap)(tx, z, taus)
-    f = jnp.sqrt(jnp.square(u).sum(1)) 
-    return f, grad_x 
+    # removed.
+    return None, None
 
 @eqx.filter_jit
 @eqx.filter_value_and_grad(has_aux=True)
