@@ -23,6 +23,9 @@ A brief overview of important modules in this repository are:
 - Manifold definitions for hyperbolic layers. Ported from the original pytorch code ([HGCN](https://github.com/HazyResearch/hgcn)) to JAX.
 - Includes Euclidean, Poincaré, and Hyperboloid manifolds.
 
-<img width="903" alt="renonet" src="https://github.com/nngabe/renonet/assets/50005216/012602fe-19f1-4ac4-a540-04fde74a3b40">
+#
+
+<img width="903" alt="renonet" src="https://github.com/nngabe/renonets/assets/50005216/f1f3b8a8-45cd-4c43-a76a-5978f7df79f1">
+
 
 
