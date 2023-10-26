@@ -14,7 +14,7 @@ A brief overview of important modules in this repository are:
 - Modules for the encoder and renormalization networks (GCN, HGCN) and decoder networks (MLP, Transformer, DeepOnet).
 
 **lib/graph_utils.py**
-- Utilities for sampling, padding, and otherwise manipulating graphs.
+- Utilities for sampling, padding, and manipulating graphs.
 
 **lib/positional_encoding.py**
 - Functions for computing positional encoding (node2vec, random walk PE, and laplacian eigenvector PE).
