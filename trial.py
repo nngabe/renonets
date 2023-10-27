@@ -13,7 +13,7 @@ import equinox as eqx
 import optax
 import optuna
 
-from nn.models.cosynn import RenONet, loss_bundle, compute_bundle_terms, make_step
+from nn.models.renonet import RenONet, loss_bundle, compute_bundle_terms, make_step
 from config import parser, set_dims
 
 from lib import utils
