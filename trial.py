@@ -1,6 +1,3 @@
-#import warnings
-#warnings.filterwarnings('ignore')
-
 import os
 import sys
 import copy
@@ -16,7 +13,7 @@ import equinox as eqx
 import optax
 import optuna
 
-from nn.models.cosynn import COSYNN, loss_bundle, compute_bundle_terms, make_step
+from nn.models.cosynn import RenONet, loss_bundle, compute_bundle_terms, make_step
 from config import parser, set_dims
 
 from lib import utils
@@ -46,7 +43,7 @@ def objective(args, trial=None):
     if args.log_path:
         model, args = utils.read_model(args)
     else:
-        model = COSYNN(args)
+        model = RenONet(args)
     
     if args.verbose: 
         print(f'\nMODULE: MODEL[DIMS](curv)')
