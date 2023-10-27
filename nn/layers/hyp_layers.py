@@ -14,7 +14,14 @@ import equinox.nn as nn
 from equinox.nn import Dropout as dropout
 
 prng = lambda i: jax.random.PRNGKey(i)
-act_dict = {'relu': jax.nn.relu, 'silu': jax.nn.silu, 'lrelu': jax.nn.leaky_relu}
+act_dict = {
+            'relu': jax.nn.relu, 
+            'silu': jax.nn.silu, 
+            'lrelu': jax.nn.leaky_relu, 
+            'gelu': jax.nn.gelu, 
+            'tanh': jax.nn.tanh,
+            'sigmoid': jax.nn.sigmoid,
+            }
 
 
 class DenseAtt(eqx.Module):

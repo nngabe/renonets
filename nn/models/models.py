@@ -160,11 +160,9 @@ class MultiheadBlock(eqx.Module):
         y = jax.vmap(self.ffn[1])(y)
         x = x + self.dropout(y, key=keys[2])
         x = jax.nn.gelu(x)
-        #x = self.norm[1](x)
         x = jax.vmap(self.ffn[2])(x) 
         x = jax.nn.gelu(x)
         x = jnp.einsum('ij,ij -> j', x, self.L)
-        #x = jnp.einsum('ij,ij,j -> j', x, self.L, self.b)
         return x
 
 

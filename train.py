@@ -43,7 +43,6 @@ if __name__ == '__main__':
     adj = jnp.array(jnp.where(A))
     adj = add_self_loops(adj)
     x = pd.read_csv(args.data_path, index_col=0).dropna().T
-    for i in range(4): x = x.T.diff().rolling(20,center=True, win_type='gaussian').mean(std=40).dropna().cumsum().T 
     x = jnp.array(x.to_numpy())
     x = x/x.max() #(x - x.min())/(x.max() - x.min())
     n,T = x.shape
@@ -87,7 +86,6 @@ if __name__ == '__main__':
     
     schedule = optax.warmup_exponential_decay_schedule(init_value=0., peak_value=args.lr, warmup_steps=args.epochs//100,
                                                         transition_steps=args.epochs, decay_rate=5e-3, end_value=args.lr/1e+2)
-    #schedule = optax.warmup_cosine_decay_schedule(init_value=0., peak_value=args.lr, warmup_steps=args.epochs//100,
     optim = optax.chain(optax.clip(args.max_norm), optax.adamw(learning_rate=schedule)) 
     opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
 
@@ -122,7 +120,7 @@ if __name__ == '__main__':
         idx = ti.astype(int)
         taus = jnp.arange(1, 1+args.tau_max, 1)
         bundles = idx + taus
-        yi = x[:,bundles].T
+        yi = x[:,bundles]
         yi = jnp.swapaxes(yi,0,1)
         xi = _batch(x, pe, idx)
         (loss, state), grad = loss_scan(model, xi, adj, ti, yi, key=key, mode=mode, state=state)
@@ -138,7 +136,7 @@ if __name__ == '__main__':
             idx = ti.astype(int)
             taus = jnp.arange(1, 1+args.tau_max, 1).astype(int)
             bundles = idx + taus
-            yi = x[:,bundles].T
+            yi = x[:,bundles]
             yi = jnp.swapaxes(yi,0,1)
             xi = _batch(x, pe, idx)
             
@@ -150,12 +148,7 @@ if __name__ == '__main__':
                 print(f'{i:04d}/{args.epochs} : loss_data = {loss[0]:.2e}, loss_pde = {loss[1]:.2e}, loss_gpde = {loss[2]:.2e}, loss_ent = {loss[3]:.2e}  lr = {schedule(i).item():.4e} (time: {time.time()-tic:.1f} s)')
             tic = time.time()
             
-            bsize,gsize,j = 0,0,0
-            while bsize<args.batch_size or gsize!=adj_test.shape[1]:
-                x, adj, pe, _   = random_subgraph(x_train, adj_train, pe_train, batch_size=args.batch_size, key=prng(i+j))
-                bsize = x.shape[0]
-                gsize = adj.shape[1]
-                j +=1
+            x, adj, pe, _   = random_subgraph(x_train, adj_train, pe_train, batch_size=args.batch_size, key=prng(i+j))
             model = eqx.tree_inference(model, value=False)
             
         if i % args.log_freq * 100 == 0:
